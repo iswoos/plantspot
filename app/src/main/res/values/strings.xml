@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">PlantSpot</string>
+    <string name="tab_home">나의 정원</string>
+    <string name="tab_encyclopedia">식물 백과</string>
+    <string name="tab_calendar">통합 달력</string>
+    <string name="tab_lounge">라운지</string>
+    <!-- Scanner related -->
+    <string name="scanner_mode_pre_adoption">공간 진단 (입양 전)</string>
+    <string name="scanner_mode_post_adoption">식물 진단 (입양 후)</string>
+    <string name="scanner_guide_pre_adoption">주변 환경이 노출되게 찍어주세요</string>
+    <string name="scanner_guide_post_adoption">식물과 주변 환경이 모두 노출되게 찍어주세요</string>
+    <string name="scanner_lux_guide">창가에서 50cm만 멀어져도 빛은 절반으로 줄어들어요!\n식물 자리에 눕혀주세요.</string>
+</resources>

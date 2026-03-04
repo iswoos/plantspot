@@ -1,0 +1,85 @@
+---
+trigger: always_on
+---
+
+# Project Rules (Android)
+
+## 1. Communication & Language
+- Language of Interaction: All explanations, answers, suggestions, and questions must be provided in Korean (한글).
+
+- Code Comments: Use Korean for code comments where necessary to enhance the developer's understanding of the logic.
+
+- Documentation & Planning: All implementation plans, step-by-step guides, and technical strategies must be written in Korean (한글) to ensure clear communication of the development process.
+
+- Terminology: Technical terms, variable names, and class names must strictly follow standard English programming terminology.
+
+## 2. Tech Stack & Environment
+- Language & Framework: Use Kotlin as the primary language and Jetpack Compose for all UI development.
+
+- Minimum SDK: Target Android 8.0 (API Level 26) or higher, aiming for the latest stable versions.
+
+- Build Tool: Use Gradle (Kotlin DSL, .gradle.kts) with Version Catalog (libs.versions.toml) for dependency management.
+
+- Key Libraries: Use Coroutines for asynchronous tasks, Retrofit2 for networking, and Hilt for Dependency Injection (DI).
+
+## 3. Architecture & Multi-Module Structure
+- Clean Architecture with Multi-Module: Strictly separate the project into the following modules to ensure concerns are isolated:
+
+- domain: A pure Kotlin module containing Business Logic and Entities (No external dependencies).
+
+- data: Contains Repository implementations, API calls, and local database handling.
+
+- presentation: Contains Jetpack Compose UI, ViewModels, and UI state management.
+
+- app: Responsible for module assembly, Application class, and Hilt configurations.
+
+- Dependency Flow: Maintain a unidirectional dependency flow: Presentation -> Domain <- Data (Applying Dependency Inversion Principle - DIP).
+
+## 4. Efficiency & Operations (Anti-Gravity Engine)
+- Standard Structure Compliance: Adhere strictly to the defined project structure, including UI templates, API communication standards, and advertisement integration logic to ensure consistency.
+
+- Server-Driven Strategy: Prioritize relying on Server API data for functional control and content changes. This design must enable instant updates and operational responses without requiring app store re-submission.
+
+## 5. Coding Style & UI
+- Declarative UI: All layouts must be written using Jetpack Compose @Composable functions instead of XML.
+
+- State Management: Manage UI states using StateFlow to ensure an observable and reactive data flow.
+
+- Naming Convention: Use lowerCamelCase for variables and methods, and UpperCamelCase for classes and Composable functions.
+
+- Immutability: Prefer val for all variables to minimize side effects; use var only when absolutely necessary.
+
+## 6. Response & Error Handling
+- User Feedback: Provide clear Korean messages (via Snackbar, Toast, etc.) to the user in case of network errors or exceptions.
+
+- Result Wrapper: Wrap API results in Result<T> or a custom UiState class to explicitly handle Loading, Success, and Failure states.
+
+- Deep Error Analysis & Structural Integrity:
+  - Root Cause Analysis (RCA): When an error occurs, do not just apply a quick fix. Analyze Logcat or stack traces to identify the root cause (e.g., architectural flaws, data flow inconsistencies) and explain it in Korean.
+  - Impact Assessment: Before any code change, evaluate if it violates Clean Architecture or Multi-module dependency flow. Assess potential side effects on other screens or business logic.
+  - Regression Prevention: Ensure fixes do not break existing features. Re-verify related data flows and suggest updates to Unit or UI tests if necessary.
+  - Consistency Check: Ensure the fix aligns with existing patterns (e.g., StateFlow management, Result wrapper usage) to maintain codebase consistency
+
+## 7. Interaction & Command Execution (STRICT)
+- Pre-Execution Explanation: Before suggesting or executing any terminal command (e.g., ./gradlew assembleDebug), you MUST provide a detailed explanation in Korean regarding what the command does and why it is necessary.
+
+- No Direct Prompts: Do not simply list a command followed by "Run command?". You must provide context and expected outcomes in Korean first.
+
+- Interpretation: For any English system logs (Logcat) or error messages, interpret and summarize them in Korean to ensure the user fully understands the situation.
+
+## 8. Dependency Management Rules
+- Gradle Sync Verification: After modifying `libs.versions.toml` or `build.gradle.kts`, you MUST execute the `./gradlew help` command to verify that there are no errors in the build configuration.
+
+## 9. Agentic Workflow & Planning
+- Strict Separation of Planning and Coding: When implementing complex features, the AI must not modify code immediately. The following three-step process must be strictly followed:
+  - Code Research: Deeply read the relevant codebase, understand the behavior and details, and write a detailed report in Korean in a research.md file. (Simple chat summaries are forbidden.)
+  - Implementation Planning: Based on the research, create a detailed implementation plan including code snippets in a separate plan.md file.
+  - Developer Review & Approval: When the developer provides feedback via comments or notes in plan.md, the AI must update the plan. Under no circumstances should source code be modified until the developer gives final approval.
+
+- Document-Based State Management (Shared Mutable State): All direction changes must occur within plan.md or research.md rather than the chat window. This maintains task continuity and prevents context loss.
+
+- Prevention of Costly Failures: Before implementation, the AI must check the existing Clean Architecture, layer structure, and potential logic duplication during the research phase to prevent changes that could damage the entire system.
+
+- Mechanical Execution of Implementation: Once the plan is approved, the AI transitions to a mechanical execution role under the developer's supervision. The AI must not arbitrarily change the design during implementation and must update the Todo List in the planning document as each step is completed.
+
+- Adherence to Explicit Halt Instructions: If the developer explicitly states "Do not implement yet" or is in the plan review phase, the AI must not proceed to the next step or suggest code changes.

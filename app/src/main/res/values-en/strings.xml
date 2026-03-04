@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PlantSpot</string>
+    <string name="tab_home">My Forest</string>
+    <string name="tab_encyclopedia">Encyclopedia</string>
+    <string name="tab_calendar">Calendar</string>
+    <string name="tab_lounge">Lounge</string>
+    <!-- Scanner related -->
+    <string name="scanner_mode_pre_adoption">Space Analysis</string>
+    <string name="scanner_mode_post_adoption">Plant Diagnosis</string>
+    <string name="scanner_guide_pre_adoption">Please show the surrounding environment.</string>
+    <string name="scanner_guide_post_adoption">Please include both the plant and surroundings.</string>
+    <string name="scanner_lux_guide">Light drops by half even 50cm from the window!\nPlease lay the phone where the plant lives.</string>
+</resources>
