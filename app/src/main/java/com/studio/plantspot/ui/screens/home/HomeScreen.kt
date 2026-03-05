@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +20,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.studio.plantspot.ui.model.PlantUiModel
 import com.studio.plantspot.ui.screens.home.components.GreetingHeader
 import com.studio.plantspot.ui.screens.home.components.PlantCard
 import com.studio.plantspot.ui.screens.home.components.QuickCareRow
@@ -26,9 +30,27 @@ import com.studio.plantspot.ui.screens.home.components.profile.UserProfileEditSh
 import com.studio.plantspot.ui.theme.PlantSpotTheme
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onNavigateToDetail: (String) -> Unit,
+    onNavigateToWritePost: (android.net.Uri) -> Unit
+) {
     var userName by remember { mutableStateOf("민수") }
     var showUserProfileSheet by remember { mutableStateOf(false) }
+
+    // CareViewModel 연동
+    val careViewModel: CareViewModel = viewModel()
+    val carePlants by careViewModel.carePlants.collectAsStateWithLifecycle()
+    val wateredTodayIds by careViewModel.wateredTodayIds.collectAsStateWithLifecycle()
+
+    // HomeViewModel 연동
+    val homeViewModel: HomeViewModel = viewModel()
+    val plants by homeViewModel.plants.collectAsStateWithLifecycle()
+
+    // 화면 진입 시 오늘의 케어 및 전체 식물 로드
+    LaunchedEffect(Unit) {
+        careViewModel.loadTodayCare()
+        homeViewModel.loadPlants()
+    }
 
     if (showUserProfileSheet) {
         UserProfileEditSheet(
@@ -58,14 +80,22 @@ fun HomeScreen() {
                         onEditProfileClick = { showUserProfileSheet = true }
                     )
                     Spacer(modifier = Modifier.height(24.dp))
-                    QuickCareRow()
+                    // CareViewModel 연동 → 물주기 완료 시 Supabase 기록
+                    QuickCareRow(
+                        carePlants = carePlants,
+                        wateredTodayIds = wateredTodayIds,
+                        onWaterClick = { plantId -> careViewModel.markAsWatered(plantId) }
+                    )
                     Spacer(modifier = Modifier.height(24.dp))
                 }
             }
 
-            // Dummy items for grid
-            items(4) {
-                PlantCard()
+            items(plants.size) { index ->
+                PlantCard(
+                    plant = plants[index],
+                    onNavigateToDetail = onNavigateToDetail,
+                    onShareSuccess = onNavigateToWritePost
+                )
             }
         }
     }
@@ -75,6 +105,9 @@ fun HomeScreen() {
 @Composable
 fun HomeScreenPreview() {
     PlantSpotTheme {
-        HomeScreen()
+        HomeScreen(
+            onNavigateToDetail = {},
+            onNavigateToWritePost = {}
+        )
     }
 }
