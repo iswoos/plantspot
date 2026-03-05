@@ -39,40 +39,51 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.studio.plantspot.ui.components.PlantTamagotchiView
+import com.studio.plantspot.ui.model.PlantUiModel
 import com.studio.plantspot.ui.screens.home.components.profile.PlantAliasEditSheet
 import com.studio.plantspot.ui.screens.home.components.share.ShareBottomSheet
 
-@Composable
-fun PlantCard(modifier: Modifier = Modifier) {
-    var showShareSheet by remember { mutableStateOf(false) }
-    var showAliasSheet by remember { mutableStateOf(false) }
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 
-    var aliasName by remember { mutableStateOf("초록이") }
-    // We can store character icon state (index or ImageVector). For now, index 0 is Face.
-    var currentIcon by remember { mutableStateOf(Icons.Filled.Face) } 
+@Composable
+fun PlantCard(
+    plant: PlantUiModel,
+    onNavigateToDetail: (String) -> Unit,
+    onShareSuccess: (android.net.Uri) -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    var showShareSheet by remember { mutableStateOf(false) }
+
+    // 갤러리 런처
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) onShareSuccess(uri)
+    }
+
+    // 카메라 런처 (프리뷰 버전 - 실제 상업용 앱에서는 FileProvider와 Uri 사용 권장)
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        // 비트맵을 URI로 변환하는 로직은 복잡하므로 여기서는 갤러리 위주로 작동 확인
+    }
+
+    // We can still keep local state for "preview" editing before saving to DB
+    var aliasName by remember { mutableStateOf(plant.aliasName) }
+    var currentIcon by remember { mutableStateOf(plant.characterIcon) } 
 
     if (showShareSheet) {
         ShareBottomSheet(
             onDismissRequest = { showShareSheet = false },
-            onCameraSelect = { showShareSheet = false /* TODO */ },
-            onGallerySelect = { showShareSheet = false /* TODO */ }
-        )
-    }
-
-    if (showAliasSheet) {
-        PlantAliasEditSheet(
-            currentAlias = aliasName,
-            onDismissRequest = { showAliasSheet = false },
-            onSaveRequest = { newAlias, iconIndex ->
-                aliasName = newAlias
-                // Update icon based on index
-                currentIcon = when(iconIndex) {
-                    0 -> Icons.Filled.Face
-                    1 -> Icons.Filled.Pets
-                    2 -> Icons.Filled.Star
-                    else -> Icons.Filled.Face
-                }
-                showAliasSheet = false
+            onCameraSelect = { 
+                showShareSheet = false 
+                cameraLauncher.launch(null)
+            },
+            onGallerySelect = { 
+                showShareSheet = false 
+                galleryLauncher.launch("image/*")
             }
         )
     }
@@ -80,7 +91,7 @@ fun PlantCard(modifier: Modifier = Modifier) {
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { showAliasSheet = true },
+            .clickable { onNavigateToDetail(plant.id) },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
@@ -93,21 +104,11 @@ fun PlantCard(modifier: Modifier = Modifier) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                // Character Avatar Placeholder (Tamagotchi emotion)
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = currentIcon, 
-                        contentDescription = "Tamagotchi Character",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                // 다마고치 Lottie 애니메이션 (matchScore + 취침 모드 기반)
+                PlantTamagotchiView(
+                    matchScore = plant.matchScore,
+                    size = 64.dp
+                )
 
                 Row {
                     // Share Button
@@ -126,7 +127,7 @@ fun PlantCard(modifier: Modifier = Modifier) {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "드라세나 마르기나타",
+                text = plant.species,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
             )
@@ -140,19 +141,19 @@ fun PlantCard(modifier: Modifier = Modifier) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "햇살 만족도: 95%",
+                    text = "햇살 만족도: ${plant.matchScore}%",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "D-2",
+                    text = "D-${plant.nextWaterDDay}",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
-                progress = { 0.6f },
+                progress = { plant.waterGaugePercent },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp)
