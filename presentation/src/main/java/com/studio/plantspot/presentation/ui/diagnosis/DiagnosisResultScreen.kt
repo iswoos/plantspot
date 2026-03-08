@@ -2,7 +2,10 @@ package com.studio.plantspot.presentation.ui.diagnosis
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -91,6 +94,8 @@ fun DiagnosisResultScreen(
         }
     }
 
+    var selectedWaterPeriod by remember { mutableStateOf(7) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -122,6 +127,7 @@ fun DiagnosisResultScreen(
                     val selectedSpot by viewModel.selectedSpot.collectAsState()
                     
                     val scope = androidx.compose.runtime.rememberCoroutineScope()
+                    // ... (ResultContent remains mostly the same, see below if needed)
                     ResultContent(
                         result = state.result, 
                         onSave = {
@@ -164,6 +170,7 @@ fun DiagnosisResultScreen(
                         isNewPlant = selectedPlantId == null,
                         onAdoptClick = { 
                             nickname = ""
+                            selectedWaterPeriod = 0 // Default: "나중에 설정할게요"
                             viewModel.resetAdoptionState()
                             showAdoptionDialog = true 
                         },
@@ -200,23 +207,98 @@ fun DiagnosisResultScreen(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         )
+                        
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "물 주기 (일 간격)", 
+                            fontWeight = FontWeight.Bold, 
+                            color = Color(0xFF2E7D32)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Custom Number Picker
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                                .background(Color(0xFFF1F8E9), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val listState = androidx.compose.foundation.lazy.rememberLazyListState(
+                                initialFirstVisibleItemIndex = selectedWaterPeriod
+                            )
+                            
+                            // Center highlight Box
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .background(Color.White.copy(alpha = 0.5f))
+                            )
+                            
+                            // Scroll settling logic: detect center item when scroll stops
+                            LaunchedEffect(listState.isScrollInProgress) {
+                                if (!listState.isScrollInProgress) {
+                                    val visibleItems = listState.layoutInfo.visibleItemsInfo
+                                    if (visibleItems.isNotEmpty()) {
+                                        val viewportCenter = (listState.layoutInfo.viewportStartOffset + listState.layoutInfo.viewportEndOffset) / 2
+                                        val centerItem = visibleItems.minByOrNull { Math.abs((it.offset + it.size / 2) - viewportCenter) }
+                                        centerItem?.let {
+                                            selectedWaterPeriod = it.index
+                                        }
+                                    }
+                                }
+                            }
+
+                            val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
+
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                contentPadding = PaddingValues(vertical = 40.dp),
+                                flingBehavior = snapFlingBehavior
+                            ) {
+                                items(31) { index ->
+                                    val isSelected = remember(selectedWaterPeriod) { 
+                                        selectedWaterPeriod == index 
+                                    }
+                                    
+                                    val listScope = androidx.compose.runtime.rememberCoroutineScope()
+                                    Text(
+                                        text = if (index == 0) "나중에 설정할게요" else "${index}일",
+                                        fontSize = if (isSelected) 20.sp else 16.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) Color(0xFF2E7D32) else Color.Gray,
+                                        modifier = Modifier.padding(vertical = 4.dp).clickable {
+                                            listScope.launch {
+                                                listState.animateScrollToItem(index)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 },
                 confirmButton = {
                     Button(
                         onClick = {
                             if (nickname.isNotBlank()) {
-                                viewModel.adoptPlant(nickname)
-                                // showAdoptionDialog = false // 즉시 닫지 않음 (성공 시 LaunchedEffect에서 닫힘)
+                                // selectedWaterPeriod is 0 for "나중에 설정할게요", otherwise they represent the days index.
+                                viewModel.adoptPlant(nickname, selectedWaterPeriod)
                             }
                         },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
                         enabled = adoptionState !is DiagnosisSaveEvent.Loading,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         if (adoptionState is DiagnosisSaveEvent.Loading) {
                             CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                         } else {
-                            Text("정원에 추가")
+                            Text("정원에 추가", fontWeight = FontWeight.Bold)
                         }
                     }
                 },
@@ -369,7 +451,7 @@ private fun ResultContent(
             } else {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        "${plantNickname}의 건강 상태를 대시보드에 기록했어요! ✨",
+                        "${plantNickname}의 기분 상태를 대시보드에 기록했어요! ✨",
                         fontSize = 14.sp,
                         color = Color(0xFF2E7D32),
                         fontWeight = FontWeight.Bold,

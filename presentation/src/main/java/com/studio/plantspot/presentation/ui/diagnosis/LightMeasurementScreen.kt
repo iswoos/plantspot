@@ -6,12 +6,14 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +24,7 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun LightMeasurementScreen(
+    mode: String = "RECOMMEND",
     onMeasurementComplete: (Float) -> Unit,
     onBack: () -> Unit
 ) {
@@ -95,8 +98,8 @@ fun LightMeasurementScreen(
             Text(
                 text = when {
                     isFinished -> "측정 완료! 🎉"
-                    hasStarted -> "조도 측정 중..."
-                    else -> "조도 측정 준비"
+                    hasStarted -> "빛의 양을 측정하고 있어요..."
+                    else -> "빛의 양 측정 준비"
                 },
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold,
@@ -105,31 +108,43 @@ fun LightMeasurementScreen(
             
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Progress Circle
-            Box(contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(
-                    progress = { if (hasStarted) animatedProgress else 0f },
-                    modifier = Modifier.size(200.dp),
-                    strokeWidth = 12.dp,
-                    color = Color(0xFF2E7D32),
-                    trackColor = Color(0xFFE8F5E9)
+            // Progress Circle or Guide Image
+            if (!hasStarted) {
+                // Show Guide Image before starting
+                Image(
+                    painter = painterResource(id = com.studio.plantspot.presentation.R.drawable.img_light_guide),
+                    contentDescription = "빛 측정 가이드",
+                    modifier = Modifier
+                        .size(220.dp)
+                        .padding(bottom = 16.dp),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Fit
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = if (hasStarted && currentLux >= 0f) "${currentLux.toInt()}" else "-",
-                        fontSize = 48.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF1B5E20)
+            } else {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.height(220.dp)) {
+                    CircularProgressIndicator(
+                        progress = { animatedProgress },
+                        modifier = Modifier.size(200.dp),
+                        strokeWidth = 12.dp,
+                        color = Color(0xFF2E7D32),
+                        trackColor = Color(0xFFE8F5E9)
                     )
-                    Text(
-                        text = "Lux",
-                        fontSize = 18.sp,
-                        color = Color.Gray
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = if (currentLux >= 0f) "${currentLux.toInt()}" else "-",
+                            fontSize = 48.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF1B5E20)
+                        )
+                        Text(
+                            text = "Lux",
+                            fontSize = 18.sp,
+                            color = Color.Gray
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Guide Text
             Card(
@@ -139,9 +154,12 @@ fun LightMeasurementScreen(
             ) {
                 Text(
                     text = when {
-                        isFinished -> "조도 측정이 완료되었습니다!\n분석 결과를 준비 중입니다."
+                        isFinished -> "측정이 완료되었습니다!\n분석 결과를 준비 중입니다."
                         hasStarted -> "측정하는 동안 기기를 움직이지 마세요."
-                        else -> "창가에서 50cm만 멀어져도 빛은 절반으로 줄어들어요!\n꼭 식물을 놓을 곳에 화면이 하늘을 향하게(전면 카메라 렌즈가 가려지지 않게) 놓아주세요."
+                        else -> {
+                            val targetWord = if (mode == "DIAGNOSE") "식물이 놓인 위치에" else "식물을 놓을 위치에"
+                            "창가에서 조금만 멀어져도 식물이 받는 빛은 크게 줄어들어요!\n\n$targetWord 핸드폰 화면이 위를 향하도록 눕혀주세요."
+                        }
                     },
                     modifier = Modifier.padding(20.dp),
                     textAlign = TextAlign.Center,

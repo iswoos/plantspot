@@ -56,7 +56,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.studio.plantspot.domain.entity.UserProfile
 import com.studio.plantspot.presentation.ui.calendar.CalendarScreen
-import com.studio.plantspot.presentation.ui.explorer.ExplorerScreen
+import com.studio.plantspot.presentation.ui.memo.MemoScreen
 import com.studio.plantspot.presentation.ui.home.HomeScreen
 import com.studio.plantspot.presentation.ui.lounge.LoungeScreen
 import com.studio.plantspot.presentation.ui.navigation.Screen
@@ -191,7 +191,7 @@ fun MainScreen(
                         }
                     ) 
                 }
-                composable(Screen.Explorer.route) { ExplorerScreen() }
+                composable(Screen.Memo.route) { MemoScreen() }
                 composable(Screen.Calendar.route) { CalendarScreen() }
                 composable(Screen.Lounge.route) { LoungeScreen() }
             }

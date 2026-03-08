@@ -243,7 +243,8 @@ fun PlantGridSection(
                 plant = plant,
                 onWaterClick = { viewModel.waterPlant(plant.id) },
                 onDiagnosisClick = { onNavigateToDiagnosis(plant.id) },
-                onShareClick = { onShareClick(plant) }
+                onShareClick = { onShareClick(plant) },
+                onCancelWaterClick = { viewModel.cancelWatering(plant.id) }
             )
         }
     }
@@ -254,9 +255,11 @@ fun PlantGridCard(
     plant: UserPlantUiModel,
     onWaterClick: () -> Unit,
     onDiagnosisClick: () -> Unit,
-    onShareClick: () -> Unit
+    onShareClick: () -> Unit,
+    onCancelWaterClick: () -> Unit = {}
 ) {
     var showDiagnosisAlert by remember { mutableStateOf(false) }
+    var showWaterCancelAlert by remember { mutableStateOf(false) }
     
     if (showDiagnosisAlert) {
         AlertDialog(
@@ -277,6 +280,30 @@ fun PlantGridCard(
             shape = RoundedCornerShape(20.dp)
         )
     }
+    
+    // 물 주기 취소 확인 다이얼로그
+    if (showWaterCancelAlert) {
+        AlertDialog(
+            onDismissRequest = { showWaterCancelAlert = false },
+            title = { Text("물 주기 취소", fontWeight = FontWeight.Bold) },
+            text = { Text("오늘 물 준 기록을 취소하시겠어요?\n(D-Day가 다시 계산됩니다)") },
+            confirmButton = {
+                TextButton(onClick = { 
+                    showWaterCancelAlert = false
+                    onCancelWaterClick()
+                }) {
+                    Text("취소하기", color = Color(0xFFE57373), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWaterCancelAlert = false }) {
+                    Text("닫기", color = Color.Gray)
+                }
+            },
+            containerColor = Color.White,
+            shape = RoundedCornerShape(20.dp)
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -290,34 +317,74 @@ fun PlantGridCard(
             modifier = Modifier.padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Share button (Small)
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.TopEnd) {
+            // Top Action Bar (Diagnosis Badge & Share Button)
+            Box(modifier = Modifier.fillMaxWidth()) {
+                // Diagnosis Badge (Top Left)
+                Surface(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFFFF59D).copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, Color(0xFFFFF176))
+                ) {
+                    Text(
+                        text = plant.diagnosisDDayText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF57F17),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+                
+                // Share button (Small)
                 IconButton(
                     onClick = onShareClick,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.align(Alignment.CenterEnd).size(32.dp)
                 ) {
                     Icon(Icons.Default.Share, contentDescription = "Share", tint = Color(0xFF4CAF50), modifier = Modifier.size(18.dp))
                 }
             }
 
-            // Circular Image / Icon
-            Surface(
-                modifier = Modifier.size(80.dp),
-                shape = CircleShape,
-                color = Color(0xFFF1F8E9),
-                border = BorderStroke(2.dp, Color(0xFF81C784).copy(alpha = 0.5f))
-            ) {
-                if (plant.imageUrl.isNullOrEmpty()) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(text = if (plant.isNight) "😴" else "🌿", fontSize = 40.sp)
+            // Circular Image / Icon with D-Day Badge
+            Box {
+                Surface(
+                    modifier = Modifier.size(80.dp),
+                    shape = CircleShape,
+                    color = Color(0xFFF1F8E9),
+                    border = BorderStroke(2.dp, Color(0xFF81C784).copy(alpha = 0.5f))
+                ) {
+                    if (plant.imageUrl.isNullOrEmpty()) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(text = if (plant.isNight) "😴" else "🌿", fontSize = 40.sp)
+                        }
+                    } else {
+                        coil.compose.AsyncImage(
+                            model = plant.imageUrl,
+                            contentDescription = null,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                } else {
-                    coil.compose.AsyncImage(
-                        model = plant.imageUrl,
-                        contentDescription = null,
-                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                }
+                
+                // D-Day Badge (Only if period is set and it's not waiting for the first water)
+                if (plant.isWateringPeriodSet && plant.waterDDayText != "첫 급수 대기") {
+                    val badgeColor = if (plant.isWaterUrgent) Color(0xFFE57373) else if (plant.isWateredToday) Color(0xFF81C784) else Color(0xFF64B5F6)
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = -4.dp, y = -4.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = badgeColor,
+                        border = BorderStroke(1.dp, Color.White)
+                    ) {
+                        Text(
+                            text = plant.waterDDayText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
@@ -337,7 +404,7 @@ fun PlantGridCard(
             Spacer(modifier = Modifier.height(6.dp))
             
             Text(
-                text = "건강: ${plant.sunshineLabel}",
+                text = "기분: ${plant.sunshineLabel}",
                 fontSize = 12.sp,
                 color = Color(0xFF4CAF50),
                 fontWeight = FontWeight.Bold,
@@ -368,14 +435,54 @@ fun PlantGridCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Button(
-                    onClick = onWaterClick,
-                    modifier = Modifier.weight(1f).height(36.dp),
-                    contentPadding = PaddingValues(0.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF42A5F5))
-                ) {
-                    Text("물 주기 💧", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                if (plant.isWateringPeriodSet) {
+                    if (plant.isWateredToday) {
+                        // Watered today -> Toggle allows cancellation
+                        OutlinedButton(
+                            onClick = { showWaterCancelAlert = true },
+                            modifier = Modifier.weight(1f).height(36.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFF81C784))
+                        ) {
+                            Text("완료 💧", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                        }
+                    } else {
+                        // Needs water or upcoming
+                        val btnColor = if (plant.isWaterUrgent) Color(0xFFE57373) else Color(0xFF42A5F5)
+                        Button(
+                            onClick = onWaterClick,
+                            modifier = Modifier.weight(1f).height(36.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = btnColor)
+                        ) {
+                            Text("물 주기 💧", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    // No watering period set 
+                    if (plant.isWateredToday) {
+                        OutlinedButton(
+                            onClick = { showWaterCancelAlert = true },
+                            modifier = Modifier.weight(1f).height(36.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFF81C784))
+                        ) {
+                            Text("완료 💧", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50))
+                        }
+                    } else {
+                        Button(
+                            onClick = onWaterClick,
+                            modifier = Modifier.weight(1f).height(36.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF42A5F5))
+                        ) {
+                            Text("물 주기 💧", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
                 }
                 
                 OutlinedButton(
@@ -448,7 +555,7 @@ fun PlantPhotoCard(plant: UserPlantUiModel, memo: String) {
                 )
                 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "건강 상태:", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    Text(text = "현재 기분:", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = plant.sunshineLabel, fontSize = 16.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.ExtraBold)
                 }
@@ -457,6 +564,12 @@ fun PlantPhotoCard(plant: UserPlantUiModel, memo: String) {
                     Text(text = "최근 급수:", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(text = plant.lastWateredDate, fontSize = 14.sp, color = Color.DarkGray, fontWeight = FontWeight.Medium)
+                }
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "최근 진단:", fontSize = 14.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = plant.diagnosisDDayText, fontSize = 14.sp, color = Color(0xFFF57F17), fontWeight = FontWeight.Medium)
                 }
 
                 // Plant Species Name

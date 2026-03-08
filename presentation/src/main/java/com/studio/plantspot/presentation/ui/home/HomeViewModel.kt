@@ -26,10 +26,14 @@ class HomeViewModel @Inject constructor(
         loadUserPlants()
     }
 
-    fun loadUserPlants() {
+    fun loadUserPlants(showLoading: Boolean = true) {
         viewModelScope.launch {
             plantRepository.getUserPlants()
-                .onStart { _uiState.value = HomeUiState.Loading }
+                .onStart { 
+                    if (showLoading) {
+                        _uiState.value = HomeUiState.Loading 
+                    }
+                }
                 .catch { e -> _uiState.value = HomeUiState.Error(e.message ?: "Unknown Error") }
                 .collect { plants ->
                     _uiState.value = if (plants.isEmpty()) {
@@ -45,23 +49,23 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 plantRepository.updateWateringDate(plantId)
-                // Partial update instead of full reload
-                val currentState = _uiState.value
-                if (currentState is HomeUiState.Success) {
-                    val updatedPlants = currentState.plants.map { plant ->
-                        if (plant.id == plantId) {
-                            val now = OffsetDateTime.now()
-                            val localNow = now.atZoneSameInstant(ZoneId.systemDefault())
-                            val dateFormatter = DateTimeFormatter.ofPattern("M월 d일 a h:mm", Locale.KOREAN)
-                            plant.copy(lastWateredDate = localNow.format(dateFormatter))
-                        } else {
-                            plant
-                        }
-                    }
-                    _uiState.value = HomeUiState.Success(updatedPlants)
-                }
+                loadUserPlants(showLoading = false) // DB 반영 후 조용히 다시 로드
             } catch (e: Exception) {
                 // Handle error
+            }
+        }
+    }
+
+    fun cancelWatering(plantId: String) {
+        viewModelScope.launch {
+            try {
+                // Await for DB deletion to finish
+                plantRepository.cancelWateringDate(plantId)
+                // Await for data reload to ensure the UI reflects the DB change
+                loadUserPlants(showLoading = false)
+            } catch (e: Exception) {
+                // Return Error state to trigger Snackbar/Toast in the UI
+                _uiState.value = HomeUiState.Error(e.message ?: "급수 취소에 실패했습니다. 다시 시도해 주세요.")
             }
         }
     }
@@ -70,13 +74,15 @@ class HomeViewModel @Inject constructor(
         val now = OffsetDateTime.now()
         
         // Match Score Decay Logic
-        val daysSinceMeasure = ChronoUnit.DAYS.between(lastMeasuredAt, now)
+        val daysSinceMeasure = ChronoUnit.DAYS.between(lastMeasuredAt, now).toInt()
         val decayedScore = if (daysSinceMeasure > 7) {
             val deduction = ((daysSinceMeasure - 7) * 10).toInt()
             (matchScore - deduction).coerceAtLeast(0)
         } else {
             matchScore
         }
+        
+        val diagnosisDDayText = if (daysSinceMeasure == 0) "오늘 진단" else "진단한 지 +${daysSinceMeasure}일"
 
         // Sunshine Label based on score
         val sunshineLabel = when {
@@ -87,9 +93,48 @@ class HomeViewModel @Inject constructor(
         }
 
         // Format Last Watered Date (Convert UTC to Local) - AM/PM Format
-        val dateFormatter = DateTimeFormatter.ofPattern("M월 d일 a h:mm", Locale.KOREAN)
+        val dateFormatter = DateTimeFormatter.ofPattern("yy.MM.dd", Locale.KOREAN)
         val localLastWateredAt = lastWateredAt?.atZoneSameInstant(ZoneId.systemDefault())
-        val formattedDate = localLastWateredAt?.format(dateFormatter) ?: "아직 급수 전 💧"
+        val formattedDate = localLastWateredAt?.format(dateFormatter) ?: "기록 없음"
+        
+        // Calculate Water D-Day
+        val isWateringPeriodSet = waterPeriod > 0
+        
+        var waterDDayText = ""
+        var isWateredToday = false
+        var isUrgent = false
+
+        if (lastWateredAt != null) {
+            val todayDate = now.toLocalDate()
+            val lastWateredDate = localLastWateredAt?.toLocalDate()
+            
+            if (lastWateredDate == todayDate) {
+                isWateredToday = true
+            }
+        }
+
+        if (isWateringPeriodSet) {
+            val todayDate = now.toLocalDate()
+            val lastWateredDate = localLastWateredAt?.toLocalDate()
+            
+            if (lastWateredDate == todayDate) {
+                isWateredToday = true
+                waterDDayText = "Today"
+            } else if (lastWateredDate != null) {
+                val daysPassed = ChronoUnit.DAYS.between(lastWateredDate, todayDate).toInt()
+                val remainingDays = waterPeriod - daysPassed
+                
+                waterDDayText = when {
+                    remainingDays > 0 -> "D-$remainingDays"
+                    remainingDays == 0 -> "D-Day"
+                    else -> "D+${-remainingDays}"
+                }
+                isUrgent = remainingDays <= 0
+            } else {
+                waterDDayText = "첫 급수 대기" 
+                isUrgent = false // D-Day 시작 전이므로 긴급 표시는 제외
+            }
+        }
         
         // Character State (Facial Expression)
         val characterState = when {
@@ -107,7 +152,12 @@ class HomeViewModel @Inject constructor(
             sunshineLabel = sunshineLabel,
             lastWateredDate = formattedDate,
             expression = characterState,
-            isNight = now.hour >= 22 || now.hour < 6
+            isNight = now.hour >= 22 || now.hour < 6,
+            waterDDayText = waterDDayText,
+            diagnosisDDayText = diagnosisDDayText,
+            isWateredToday = isWateredToday,
+            isWaterUrgent = isUrgent,
+            isWateringPeriodSet = isWateringPeriodSet
         )
     }
 }
@@ -128,7 +178,12 @@ data class UserPlantUiModel(
     val sunshineLabel: String,
     val lastWateredDate: String,
     val expression: CharacterExpression,
-    val isNight: Boolean
+    val isNight: Boolean,
+    val waterDDayText: String,
+    val diagnosisDDayText: String,
+    val isWateredToday: Boolean,
+    val isWaterUrgent: Boolean,
+    val isWateringPeriodSet: Boolean
 )
 
 enum class CharacterExpression {

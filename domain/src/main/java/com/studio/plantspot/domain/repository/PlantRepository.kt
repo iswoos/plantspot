@@ -9,7 +9,8 @@ interface PlantRepository {
     suspend fun updateWateringDate(plantId: String)
     suspend fun updateNickname(plantId: String, newNickname: String)
     suspend fun updateDiagnosisResult(plantId: String, score: Int, imageUrl: String? = null)
-    suspend fun addPlant(nickname: String, officialName: String, imageUrl: String?, score: Int): String
+    suspend fun addPlant(nickname: String, officialName: String, imageUrl: String?, score: Int, waterPeriod: Int): String
+    suspend fun cancelWateringDate(plantId: String)
     suspend fun addDiagnosisHistory(history: PlantDiagnosisHistory)
     suspend fun deletePlant(plantId: String)
 }

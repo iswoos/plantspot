@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -13,7 +14,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     
     // Bottom Tabs
     object Home : Screen("home", "나의 정원", Icons.Default.Home)
-    object Explorer : Screen("explorer", "식물 백과", Icons.Default.Search)
+    object Memo : Screen("memo", "메모하기", Icons.Default.Edit)
     object Calendar : Screen("calendar", "통합 캘린더", Icons.Default.DateRange)
     object Lounge : Screen("lounge", "플랜트 라운지", Icons.Default.Person)
     
@@ -26,7 +27,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
 
 val bottomNavItems = listOf(
     Screen.Home,
-    Screen.Explorer,
+    Screen.Memo,
     Screen.Calendar,
     Screen.Lounge
 )

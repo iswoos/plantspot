@@ -107,6 +107,7 @@ fun NavGraph(authViewModel: AuthViewModel) {
                 navController.getBackStackEntry(Screen.Main.route)
             )
             LightMeasurementScreen(
+                mode = mode,
                 onMeasurementComplete = { lux ->
                     diagnosisViewModel.setLuxValue(lux)
                     diagnosisViewModel.startDiagnosis(mode)

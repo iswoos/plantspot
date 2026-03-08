@@ -1,4 +1,4 @@
-package com.studio.plantspot.presentation.ui.explorer
+package com.studio.plantspot.presentation.ui.memo
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,8 +8,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 @Composable
-fun ExplorerScreen() {
+fun MemoScreen() {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("식물 백과 (Explorer)\n준비 중입니다.")
+        Text("메모장\n(구현 예정)")
     }
 }

@@ -107,7 +107,7 @@ class DiagnosisViewModel @Inject constructor(
         _selectedPlantId.value = id
     }
 
-    fun adoptPlant(nickname: String) {
+    fun adoptPlant(nickname: String, waterPeriod: Int) {
         val currentState = _uiState.value
         if (currentState !is DiagnosisUiState.Success) return
         
@@ -133,7 +133,8 @@ class DiagnosisViewModel @Inject constructor(
                     nickname = nickname,
                     officialName = result.plantName ?: "알 수 없는 식물",
                     imageUrl = uploadedUrl,
-                    score = result.matchScore ?: 0
+                    score = result.matchScore ?: 0,
+                    waterPeriod = waterPeriod
                 )
                 
                 // 3. 진단 히스토리 등록 (첫 진단)
