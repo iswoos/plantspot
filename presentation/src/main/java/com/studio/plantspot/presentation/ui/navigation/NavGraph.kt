@@ -44,8 +44,10 @@ fun NavGraph(authViewModel: AuthViewModel) {
                 is AuthViewModel.UiState.RequireNickname -> state.profile
                 else -> null
             }
+            val diagnosisViewModel: DiagnosisViewModel = hiltViewModel()
             MainScreen(
                 user = userProfile,
+                viewModel = diagnosisViewModel,
                 onNavigateToDiagnosis = { mode ->
                     navController.navigate("diagnosis_camera/$mode")
                 }
@@ -61,9 +63,17 @@ fun NavGraph(authViewModel: AuthViewModel) {
                 navController.getBackStackEntry(Screen.Main.route)
             )
             CameraCaptureScreen(
-                onImageCaptured = { uri ->
-                    diagnosisViewModel.setCapturedImageUri(uri)
-                    navController.navigate("diagnosis_spot/$mode")
+                mode = mode,
+                onImagesCaptured = { envUri, closeUpUri ->
+                    diagnosisViewModel.setEnvImageUri(envUri)
+                    closeUpUri?.let { diagnosisViewModel.setCloseUpImageUri(it) }
+                    
+                    if (mode == "DIAGNOSE") {
+                        // 식물 진단 모드에서는 지점 선택 생략하고 바로 조도 측정으로 이동
+                        navController.navigate("diagnosis_light/$mode")
+                    } else {
+                        navController.navigate("diagnosis_spot/$mode")
+                    }
                 },
                 onBack = { navController.popBackStack() }
             )

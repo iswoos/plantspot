@@ -28,6 +28,26 @@ private data class UserPlantDto(
     @SerialName("created_at") val createdAt: String
 )
 
+@Serializable
+private data class PlantInsertDto(
+    @SerialName("user_id") val userId: String,
+    val nickname: String,
+    @SerialName("official_name") val officialName: String,
+    @SerialName("image_url") val imageUrl: String?,
+    @SerialName("match_score") val matchScore: Int,
+    @SerialName("water_period") val waterPeriod: Int,
+    @SerialName("last_watered_at") val lastWateredAt: String,
+    @SerialName("last_measured_at") val lastMeasuredAt: String,
+    @SerialName("created_at") val createdAt: String
+)
+
+@Serializable
+private data class DiagnosisUpdateDto(
+    @SerialName("match_score") val matchScore: Int,
+    @SerialName("last_measured_at") val lastMeasuredAt: String,
+    @SerialName("image_url") val imageUrl: String? = null
+)
+
 class PlantRepositoryImpl @Inject constructor(
     private val supabase: SupabaseClient
 ) : PlantRepository {
@@ -66,6 +86,38 @@ class PlantRepositoryImpl @Inject constructor(
             }) {
                 filter { eq("id", plantId) }
             }
+    }
+
+    override suspend fun updateDiagnosisResult(plantId: String, score: Int, imageUrl: String?) {
+        val updateDto = DiagnosisUpdateDto(
+            matchScore = score,
+            lastMeasuredAt = OffsetDateTime.now().toString(),
+            imageUrl = imageUrl
+        )
+        
+        supabase.postgrest.from("plantspot_user_plants")
+            .update(updateDto) {
+                filter { eq("id", plantId) }
+            }
+    }
+
+    override suspend fun addPlant(nickname: String, officialName: String, imageUrl: String?, score: Int) {
+        val userId = supabase.auth.currentUserOrNull()?.id ?: throw Exception("User not logged in")
+        val now = OffsetDateTime.now().toString()
+        
+        val insertDto = PlantInsertDto(
+            userId = userId,
+            nickname = nickname,
+            officialName = officialName,
+            imageUrl = imageUrl,
+            matchScore = score,
+            waterPeriod = 7,
+            lastWateredAt = now,
+            lastMeasuredAt = now,
+            createdAt = now
+        )
+
+        supabase.postgrest.from("plantspot_user_plants").insert(insertDto)
     }
 
     override suspend fun deletePlant(plantId: String) {

@@ -11,6 +11,7 @@ data class DiagnosisResult(
     val analysis: String? = null,
     val measuredLux: Float? = null,
     val matchScore: Int? = null,
+    val suitabilityScore: Int? = null,
     val solution: String? = null,
     val careTips: CareTips? = null
 )

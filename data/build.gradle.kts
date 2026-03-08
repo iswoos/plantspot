@@ -29,6 +29,7 @@ dependencies {
     // Supabase
     implementation(libs.supabase.gotrue)
     implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.storage)
     implementation(libs.supabase.functions)
     implementation(libs.ktor.client.android)
     implementation(libs.ktor.client.core)

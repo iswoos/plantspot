@@ -14,16 +14,22 @@ class DiagnosisRepositoryImpl @Inject constructor(
 ) : DiagnosisRepository {
 
     override suspend fun getDiagnosis(
-        image: ByteArray,
+        images: List<ByteArray>,
         lux: Float,
         hour: Int,
         date: String,
         mode: String
     ): DiagnosisResult {
-        val base64Image = android.util.Base64.encodeToString(image, android.util.Base64.NO_WRAP)
+        val base64Images = images.map { 
+            android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP)
+        }
         
         val payload = buildJsonObject {
-            put("image", base64Image)
+            put("images", buildJsonObject {
+                base64Images.forEachIndexed { index, base64 ->
+                    put("image$index", base64)
+                }
+            })
             put("lux", lux)
             put("hour", hour)
             put("date", date)

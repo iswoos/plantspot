@@ -32,6 +32,10 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.loadUserPlants()
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = Color(0xFFF1F8E9) // Light green background

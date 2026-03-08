@@ -60,15 +60,20 @@ import com.studio.plantspot.presentation.ui.home.HomeScreen
 import com.studio.plantspot.presentation.ui.lounge.LoungeScreen
 import com.studio.plantspot.presentation.ui.navigation.Screen
 import com.studio.plantspot.presentation.ui.navigation.bottomNavItems
+import com.studio.plantspot.presentation.ui.diagnosis.PlantSelectionBottomSheet
+import com.studio.plantspot.presentation.ui.diagnosis.DiagnosisViewModel
 
 @Composable
 fun MainScreen(
     user: UserProfile?,
+    viewModel: DiagnosisViewModel,
     onNavigateToDiagnosis: (String) -> Unit = {}
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
     var isScannerExpanded by remember { mutableStateOf(false) }
+    var showPlantSelection by remember { mutableStateOf(false) }
+    val userPlants by viewModel.userPlants.collectAsState()
     
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -209,11 +214,23 @@ fun MainScreen(
                         icon = Icons.Default.Face,
                         onClick = {
                             isScannerExpanded = false
-                            onNavigateToDiagnosis("DIAGNOSE")
+                            showPlantSelection = true
                         }
                     )
                 }
             }
+        }
+
+        // Plant Selection Bottom Sheet
+        if (showPlantSelection) {
+            PlantSelectionBottomSheet(
+                plants = userPlants,
+                onPlantSelected = { id ->
+                    viewModel.setSelectedPlantId(id)
+                    onNavigateToDiagnosis("DIAGNOSE")
+                },
+                onDismiss = { showPlantSelection = false }
+            )
         }
     }
 }

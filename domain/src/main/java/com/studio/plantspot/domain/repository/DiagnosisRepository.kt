@@ -4,7 +4,7 @@ import com.studio.plantspot.domain.entity.DiagnosisResult
 
 interface DiagnosisRepository {
     suspend fun getDiagnosis(
-        image: ByteArray,
+        images: List<ByteArray>,
         lux: Float,
         hour: Int,
         date: String,
