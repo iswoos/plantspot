@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.content.pm.PackageManager
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -107,11 +108,22 @@ fun MainScreen(
                     
                     bottomNavItems.forEachIndexed { index, screen ->
                         if (index == 2) {
-                            Spacer(Modifier.weight(0.4f))
+                            Spacer(Modifier.weight(1f))
                         }
                         NavigationBarItem(
-                            icon = { screen.icon?.let { Icon(it, contentDescription = screen.title) } },
-                            label = { Text(screen.title) },
+                            icon = { 
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    screen.icon?.let { Icon(it, contentDescription = screen.title) }
+                                }
+                            },
+                            label = { 
+                                Text(
+                                    text = screen.title,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                ) 
+                            },
                             selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
                                 isScannerExpanded = false
@@ -126,9 +138,9 @@ fun MainScreen(
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = Color(0xFF2E7D32),
                                 selectedTextColor = Color(0xFF2E7D32),
-                                unselectedIconColor = Color.Gray,
-                                unselectedTextColor = Color.Gray,
-                                indicatorColor = Color(0xFFE8F5E9)
+                                unselectedIconColor = Color.LightGray,
+                                unselectedTextColor = Color.LightGray,
+                                indicatorColor = Color.Transparent
                             )
                         )
                     }
@@ -170,7 +182,15 @@ fun MainScreen(
                 startDestination = Screen.Home.route,
                 modifier = Modifier.padding(innerPadding)
             ) {
-                composable(Screen.Home.route) { HomeScreen(user) }
+                composable(Screen.Home.route) { 
+                    HomeScreen(
+                        user = user,
+                        onNavigateToDiagnosis = { plantId ->
+                            viewModel.setSelectedPlantId(plantId)
+                            onNavigateToDiagnosis("DIAGNOSE")
+                        }
+                    ) 
+                }
                 composable(Screen.Explorer.route) { ExplorerScreen() }
                 composable(Screen.Calendar.route) { CalendarScreen() }
                 composable(Screen.Lounge.route) { LoungeScreen() }

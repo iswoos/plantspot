@@ -1,23 +1,33 @@
-# Implementation Plan: 기존 식물 진단 시 이미지 업데이트
+# Implementation Plan: 메인화면 UI 통합 및 한국 시간(KST) 적용
 
-## 1. 개요
-기존 식물의 건강 상태를 진단할 때마다 최신 사진으로 정원 리스트의 이미지가 갱신되도록 기능을 확장합니다.
+사용자님의 피드백을 반영하여 퀵케어를 제거하고 카드 내부에 기능을 통합하며, 데이터의 정확성을 위해 한국 시간대(KST)를 적용합니다.
 
-## 2. 제안된 변경 사항
+## 1. 주요 변경 사항
 
-### [Domain Layer]
-#### [MODIFY] [PlantRepository.kt](file:///Users/iseung-u/Documents/Plantspot/domain/src/main/java/com/studio/plantspot/domain/repository/PlantRepository.kt)
-- `updateDiagnosisResult(plantId: String, score: Int, imageUrl: String?)`로 시그니처 변경.
+### [Backend/Data Layer]
+- **KST 시간대 강제 적용**: `PlantRepositoryImpl`에서 `OffsetDateTime.now()` 사용 시 `ZoneId.of("Asia/Seoul")`을 명시적으로 사용하도록 수정합니다.
+  - 대상: `addPlant`, `updateWateringDate`, `updateDiagnosisResult`
 
-### [Data Layer]
-#### [MODIFY] [PlantRepositoryImpl.kt](file:///Users/iseung-u/Documents/Plantspot/data/src/main/java/com/studio/plantspot/data/repository/PlantRepositoryImpl.kt)
-- `imageUrl`이 존재할 경우 `plantspot_user_plants` 테이블의 `image_url` 필드도 함께 업데이트하도록 수정.
+### [Presentation Layer - HomeScreen]
+- **UI 구조 단순화**:
+  - 상단 `QuickCareTopSection`을 제거하여 스와이프 피로도를 줄입니다.
+  - 메인 카드의 높이를 다시 조절하여 하단 FAB와의 간섭을 최소화합니다.
+- **식물 카드(PlantCard) 기능 통합**:
+  - **물 주기 버튼**: 카드 하단 정보 영역에 큰 "물 주기 완료" 버튼을 추가합니다. 
+    - 이미 오늘 물을 준 경우 "오늘의 수분 충전 완료 ✅" 형태로 상태를 표시합니다.
+  - **건강 검진 기능**: "오늘의 건강 검진" 버튼을 추가하여 즉시 식물 진단 화면으로 연결합니다.
+  - **공유하기**: 우측 상단 'i' 아이콘을 공유 아이콘으로 변경하고, 이미지 생성 기능을 연결합니다.
 
-### [Presentation Layer]
-#### [MODIFY] [DiagnosisViewModel.kt](file:///Users/iseung-u/Documents/Plantspot/presentation/src/main/java/com/studio/plantspot/presentation/ui/diagnosis/DiagnosisViewModel.kt)
-- `startDiagnosis`에서 `_selectedPlantId`가 있을 경우:
-    1. 사진(근접 사진 우선)을 업로드.
-    2. 생성된 URL과 진단 점수를 함께 업데이트 호출.
+## 2. 공유하기 기능 상세 (ID 카드 컨셉)
+- 유저님이 'i'를 공유하기로 변경 요청하신 만큼, 식물을 자랑할 수 있는 '식물 주민증' 형태의 이미지를 생성하여 공유합니다.
+- 1차 구현에서는 현재 카드 디자인을 기반으로 한 깔끔한 정보 이미지를 생성합니다.
 
 ## 3. 검증 계획
-- **수동 검증**: 기존 입양된 식물을 선택하여 진단 수행 -> 진단 완료 후 대시보드로 돌아왔을 때 해당 식물의 사진이 최신 사진으로 바뀌어 있는지 확인.
+### 수동 검증
+1. **시간대 확인**: 식물을 새로 입양하거나 물을 준 후 Supabase DB의 `last_watered_at` 필드가 `+09:00` 오프셋으로 저장되는지 확인합니다.
+2. **UI 레이아웃**: 식물이 1개일 때와 여러 개일 때 Pager와 카드 내 버튼들이 FAB에 가려지지 않는지 확인합니다.
+3. **기능 동작**: 카드 내 "물 주기 완료" 클릭 시 히스토리가 쌓이고 버튼 상태가 변하는지 확인합니다.
+
+## 4. 사용자 검토 필요
+> [!NOTE]
+> **KST 적용 관련**: 기존에 UTC로 저장된 데이터들은 앱에서 불러올 때 자동으로 로컬 시간대로 변환되어 표시되므로 소급 적용에는 문제가 없습니다. 새로 생성되는 데이터부터는 `+09:00`으로 명시적 저장됩니다.

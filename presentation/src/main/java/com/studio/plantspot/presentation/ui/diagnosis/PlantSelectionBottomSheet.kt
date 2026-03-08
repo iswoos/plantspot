@@ -55,7 +55,7 @@ fun PlantSelectionBottomSheet(
                 // 새로운 식물 진단 옵션
                 item {
                     PlantSelectionItem(
-                        title = "새로운 식물 진단하기 (입양)",
+                        title = "새로운 식물 입양하기",
                         isNew = true,
                         onClick = {
                             onPlantSelected(null)

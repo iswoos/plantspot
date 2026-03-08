@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
@@ -23,7 +24,7 @@ private data class UserPlantDto(
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("match_score") val matchScore: Int = 0,
     @SerialName("water_period") val waterPeriod: Int = 7,
-    @SerialName("last_watered_at") val lastWateredAt: String,
+    @SerialName("last_watered_at") val lastWateredAt: String? = null,
     @SerialName("last_measured_at") val lastMeasuredAt: String,
     @SerialName("created_at") val createdAt: String
 )
@@ -36,7 +37,7 @@ private data class PlantInsertDto(
     @SerialName("image_url") val imageUrl: String?,
     @SerialName("match_score") val matchScore: Int,
     @SerialName("water_period") val waterPeriod: Int,
-    @SerialName("last_watered_at") val lastWateredAt: String,
+    @SerialName("last_watered_at") val lastWateredAt: String? = null,
     @SerialName("last_measured_at") val lastMeasuredAt: String,
     @SerialName("created_at") val createdAt: String
 )
@@ -46,6 +47,12 @@ private data class DiagnosisUpdateDto(
     @SerialName("match_score") val matchScore: Int,
     @SerialName("last_measured_at") val lastMeasuredAt: String,
     @SerialName("image_url") val imageUrl: String? = null
+)
+
+@Serializable
+private data class WaterHistoryInsertDto(
+    @SerialName("plant_id") val plantId: String,
+    @SerialName("watered_at") val wateredAt: String
 )
 
 class PlantRepositoryImpl @Inject constructor(
@@ -71,12 +78,22 @@ class PlantRepositoryImpl @Inject constructor(
     }
 
     override suspend fun updateWateringDate(plantId: String) {
+        val now = OffsetDateTime.now(ZoneOffset.UTC).toString()
+        
+        // 1. Update the plant's last_watered_at
         supabase.postgrest.from("plantspot_user_plants")
             .update({
-                set("last_watered_at", OffsetDateTime.now().toString())
+                set("last_watered_at", now)
             }) {
                 filter { eq("id", plantId) }
             }
+            
+        // 2. Insert into the water history table
+        val historyDto = WaterHistoryInsertDto(
+            plantId = plantId,
+            wateredAt = now
+        )
+        supabase.postgrest.from("plantspot_user_plants_water_history").insert(historyDto)
     }
 
     override suspend fun updateNickname(plantId: String, newNickname: String) {
@@ -91,7 +108,7 @@ class PlantRepositoryImpl @Inject constructor(
     override suspend fun updateDiagnosisResult(plantId: String, score: Int, imageUrl: String?) {
         val updateDto = DiagnosisUpdateDto(
             matchScore = score,
-            lastMeasuredAt = OffsetDateTime.now().toString(),
+            lastMeasuredAt = OffsetDateTime.now(ZoneOffset.UTC).toString(),
             imageUrl = imageUrl
         )
         
@@ -103,7 +120,7 @@ class PlantRepositoryImpl @Inject constructor(
 
     override suspend fun addPlant(nickname: String, officialName: String, imageUrl: String?, score: Int) {
         val userId = supabase.auth.currentUserOrNull()?.id ?: throw Exception("User not logged in")
-        val now = OffsetDateTime.now().toString()
+        val now = OffsetDateTime.now(ZoneOffset.UTC).toString()
         
         val insertDto = PlantInsertDto(
             userId = userId,
@@ -112,7 +129,7 @@ class PlantRepositoryImpl @Inject constructor(
             imageUrl = imageUrl,
             matchScore = score,
             waterPeriod = 7,
-            lastWateredAt = now,
+            lastWateredAt = null, // 입양 시점에는 물 준 날을 Null로 설정
             lastMeasuredAt = now,
             createdAt = now
         )
@@ -136,7 +153,7 @@ class PlantRepositoryImpl @Inject constructor(
             imageUrl = imageUrl,
             matchScore = matchScore,
             waterPeriod = waterPeriod,
-            lastWateredAt = OffsetDateTime.parse(lastWateredAt),
+            lastWateredAt = lastWateredAt?.let { OffsetDateTime.parse(it) },
             lastMeasuredAt = OffsetDateTime.parse(lastMeasuredAt),
             createdAt = OffsetDateTime.parse(createdAt)
         )

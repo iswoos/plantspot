@@ -135,6 +135,9 @@ class DiagnosisViewModel @Inject constructor(
                     score = result.matchScore ?: 0
                 )
                 
+                // 새로운 식물이 추가되었으므로 리스트를 다시 불러옴
+                loadUserPlants()
+                
                 _adoptionState.value = DiagnosisSaveEvent.Success
             } catch (e: Exception) {
                 _adoptionState.value = DiagnosisSaveEvent.Error(e.message ?: "입양 중 오류가 발생했습니다.")

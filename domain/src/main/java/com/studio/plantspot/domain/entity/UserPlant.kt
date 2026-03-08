@@ -10,7 +10,7 @@ data class UserPlant(
     val imageUrl: String?,
     val matchScore: Int,
     val waterPeriod: Int,
-    val lastWateredAt: OffsetDateTime,
+    val lastWateredAt: OffsetDateTime?,
     val lastMeasuredAt: OffsetDateTime,
     val createdAt: OffsetDateTime
 )

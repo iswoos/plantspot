@@ -8,7 +8,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
@@ -42,9 +45,23 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 plantRepository.updateWateringDate(plantId)
-                loadUserPlants() // Refresh list
+                // Partial update instead of full reload
+                val currentState = _uiState.value
+                if (currentState is HomeUiState.Success) {
+                    val updatedPlants = currentState.plants.map { plant ->
+                        if (plant.id == plantId) {
+                            val now = OffsetDateTime.now()
+                            val localNow = now.atZoneSameInstant(ZoneId.systemDefault())
+                            val dateFormatter = DateTimeFormatter.ofPattern("M월 d일 a h:mm", Locale.KOREAN)
+                            plant.copy(lastWateredDate = localNow.format(dateFormatter))
+                        } else {
+                            plant
+                        }
+                    }
+                    _uiState.value = HomeUiState.Success(updatedPlants)
+                }
             } catch (e: Exception) {
-                // Handle error (e.g., show snackbar)
+                // Handle error
             }
         }
     }
@@ -61,15 +78,18 @@ class HomeViewModel @Inject constructor(
             matchScore
         }
 
-        // Water Gauge Calculation
-        val daysSinceWatered = ChronoUnit.DAYS.between(lastWateredAt, now)
-        val waterPercentage = if (waterPeriod > 0) {
-            (1.0 - (daysSinceWatered.toDouble() / waterPeriod.toDouble()))
-                .coerceIn(0.0, 1.0)
-                .toFloat()
-        } else 1f
+        // Sunshine Label based on score
+        val sunshineLabel = when {
+            decayedScore >= 80 -> "매우 좋음"
+            decayedScore >= 60 -> "좋음"
+            decayedScore >= 40 -> "보통"
+            else -> "주의 필요"
+        }
 
-        val dDay = waterPeriod - daysSinceWatered
+        // Format Last Watered Date (Convert UTC to Local) - AM/PM Format
+        val dateFormatter = DateTimeFormatter.ofPattern("M월 d일 a h:mm", Locale.KOREAN)
+        val localLastWateredAt = lastWateredAt?.atZoneSameInstant(ZoneId.systemDefault())
+        val formattedDate = localLastWateredAt?.format(dateFormatter) ?: "아직 급수 전 💧"
         
         // Character State (Facial Expression)
         val characterState = when {
@@ -84,8 +104,8 @@ class HomeViewModel @Inject constructor(
             officialName = officialName,
             imageUrl = imageUrl,
             matchScore = decayedScore,
-            waterPercentage = waterPercentage,
-            dDay = dDay.toInt(),
+            sunshineLabel = sunshineLabel,
+            lastWateredDate = formattedDate,
             expression = characterState,
             isNight = now.hour >= 22 || now.hour < 6
         )
@@ -105,8 +125,8 @@ data class UserPlantUiModel(
     val officialName: String,
     val imageUrl: String?,
     val matchScore: Int,
-    val waterPercentage: Float,
-    val dDay: Int,
+    val sunshineLabel: String,
+    val lastWateredDate: String,
     val expression: CharacterExpression,
     val isNight: Boolean
 )
