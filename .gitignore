@@ -8,8 +8,16 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
-/build
+build/
+**/build/
 /captures
 .externalNativeBuild
 .cxx
 local.properties
+plan.md
+research.md
+Planning Document.md
+.kotlin/
+**/release/
+*.hprof
+

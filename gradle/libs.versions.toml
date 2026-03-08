@@ -22,6 +22,7 @@ navigationCompose = "2.8.5"
 splashscreen = "1.0.1"
 camerax = "1.4.1"
 coil = "2.7.0"
+capturable = "2.1.0"
 
 
 
@@ -77,6 +78,7 @@ androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycl
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 androidx-camera-extensions = { group = "androidx.camera", name = "camera-extensions", version.ref = "camerax" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+capturable = { group = "dev.shreyaspatil", name = "capturable", version.ref = "capturable" }
 
 
 

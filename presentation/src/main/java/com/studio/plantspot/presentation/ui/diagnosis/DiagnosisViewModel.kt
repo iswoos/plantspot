@@ -17,6 +17,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.studio.plantspot.domain.entity.DiagnosisResult
 import com.studio.plantspot.domain.entity.UserPlant
+import com.studio.plantspot.domain.entity.PlantDiagnosisHistory
 import com.studio.plantspot.domain.repository.DiagnosisRepository
 import com.studio.plantspot.domain.repository.FileRepository
 import com.studio.plantspot.domain.repository.PlantRepository
@@ -128,11 +129,23 @@ class DiagnosisViewModel @Inject constructor(
                 }
                 
                 // 2. DB 등록
-                plantRepository.addPlant(
+                val newPlantId = plantRepository.addPlant(
                     nickname = nickname,
                     officialName = result.plantName ?: "알 수 없는 식물",
                     imageUrl = uploadedUrl,
                     score = result.matchScore ?: 0
+                )
+                
+                // 3. 진단 히스토리 등록 (첫 진단)
+                plantRepository.addDiagnosisHistory(
+                    PlantDiagnosisHistory(
+                        plantId = newPlantId,
+                        healthStatus = result.healthStatus ?: "normal",
+                        healthScore = result.matchScore ?: 0,
+                        analysis = result.analysis,
+                        solution = result.solution,
+                        imageUrl = uploadedUrl
+                    )
                 )
                 
                 // 새로운 식물이 추가되었으므로 리스트를 다시 불러옴
@@ -216,6 +229,18 @@ class DiagnosisViewModel @Inject constructor(
                     
                     score?.let { s ->
                         plantRepository.updateDiagnosisResult(plantId, s, uploadedUrl)
+                        
+                        // 진단 히스토리 추가 (업데이트 시점)
+                        plantRepository.addDiagnosisHistory(
+                            PlantDiagnosisHistory(
+                                plantId = plantId,
+                                healthStatus = result.healthStatus ?: "normal",
+                                healthScore = s,
+                                analysis = result.analysis,
+                                solution = result.solution,
+                                imageUrl = uploadedUrl
+                            )
+                        )
                     }
                 }
 

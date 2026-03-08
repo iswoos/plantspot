@@ -1,6 +1,7 @@
 package com.studio.plantspot.domain.repository
 
 import com.studio.plantspot.domain.entity.UserPlant
+import com.studio.plantspot.domain.entity.PlantDiagnosisHistory
 import kotlinx.coroutines.flow.Flow
 
 interface PlantRepository {
@@ -8,6 +9,7 @@ interface PlantRepository {
     suspend fun updateWateringDate(plantId: String)
     suspend fun updateNickname(plantId: String, newNickname: String)
     suspend fun updateDiagnosisResult(plantId: String, score: Int, imageUrl: String? = null)
-    suspend fun addPlant(nickname: String, officialName: String, imageUrl: String?, score: Int)
+    suspend fun addPlant(nickname: String, officialName: String, imageUrl: String?, score: Int): String
+    suspend fun addDiagnosisHistory(history: PlantDiagnosisHistory)
     suspend fun deletePlant(plantId: String)
 }
