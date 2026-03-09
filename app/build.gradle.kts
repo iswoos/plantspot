@@ -24,7 +24,7 @@ android {
         applicationId = "com.studio.plantspot"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
+        versionCode = 3
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -36,11 +36,15 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // 네이티브 디버그 기호 포함
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
         }
     }
     compileOptions {

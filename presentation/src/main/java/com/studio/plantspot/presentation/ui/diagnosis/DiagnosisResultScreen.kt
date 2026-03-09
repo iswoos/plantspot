@@ -37,6 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.studio.plantspot.domain.entity.DiagnosisResult
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import android.net.Uri
+import coil.compose.AsyncImage
 import java.io.File
 import java.io.FileOutputStream
 import kotlinx.coroutines.launch
@@ -124,12 +128,16 @@ fun DiagnosisResultScreen(
                 }
                 is DiagnosisUiState.Success -> {
                     val capturedImageUri by viewModel.capturedImageUri.collectAsState()
+                    val envImageUri by viewModel.envImageUri.collectAsState()
+                    val closeUpImageUri by viewModel.closeUpImageUri.collectAsState()
                     val selectedSpot by viewModel.selectedSpot.collectAsState()
                     
                     val scope = androidx.compose.runtime.rememberCoroutineScope()
                     // ... (ResultContent remains mostly the same, see below if needed)
                     ResultContent(
                         result = state.result, 
+                        imageUri = envImageUri,
+                        closeUpUri = closeUpImageUri,
                         onSave = {
                             val uri = capturedImageUri
                             val spot = selectedSpot ?: (0.5f to 0.5f)
@@ -339,6 +347,8 @@ private fun LoadingScreen() {
 @Composable
 private fun ResultContent(
     result: DiagnosisResult, 
+    imageUri: Uri? = null,
+    closeUpUri: Uri? = null,
     onSave: () -> Unit,
     onShare: () -> Unit,
     onFinish: () -> Unit,
@@ -351,6 +361,20 @@ private fun ResultContent(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
+        item {
+            val displayUri = if (result.plantName != null) closeUpUri else imageUri
+            displayUri?.let { uri ->
+                AsyncImage(
+                    model = uri,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp)),
+                    contentScale = ContentScale.FillWidth
+                )
+            }
+        }
+
         result.spaceAnalysis?.let { analysis ->
             item {
                 HealthStatusCard(
@@ -427,44 +451,57 @@ private fun ResultContent(
         }
 
         item {
-            if (isNewPlant) {
-                Button(
-                    onClick = onAdoptClick,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
-                ) {
-                    Text("내 정원으로 입양하기 🌿", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = onFinish,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFE57373), // 진단 결과와 통일감을 주는 빨간색
-                        contentColor = Color.White        // 글자색 하얀색
-                    )
-                ) {
-                    Text("입양하지 않기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-            } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "${plantNickname}의 기분 상태를 대시보드에 기록했어요! ✨",
-                        fontSize = 14.sp,
-                        color = Color(0xFF2E7D32),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(vertical = 12.dp)
-                    )
+            if (result.plantName != null) {
+                // 식물 진단 모드 (기존 입양 플로우 유지)
+                if (isNewPlant) {
                     Button(
-                        onClick = onFinish,
+                        onClick = onAdoptClick,
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
                     ) {
-                        Text("확인", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("내 정원으로 입양하기 🌿", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onFinish,
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE57373),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("입양하지 않기", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "${plantNickname}의 기분 상태를 업데이트했어요! ✨",
+                            fontSize = 14.sp,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 12.dp)
+                        )
+                        Button(
+                            onClick = onFinish,
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                        ) {
+                            Text("확인", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            } else {
+                // 공간 진단 모드 (앨범에 저장/진단 공유 버튼은 상단에 이미 존재하므로 여기서는 진단 종료만 표시)
+                Button(
+                    onClick = onFinish,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                ) {
+                    Text("진단 종료", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
