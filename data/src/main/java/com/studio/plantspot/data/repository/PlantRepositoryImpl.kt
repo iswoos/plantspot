@@ -447,6 +447,53 @@ class PlantRepositoryImpl @Inject constructor(
             }
         }
 
+    override fun getPlantDiagnosisHistory(plantId: String): Flow<List<PlantDiagnosisHistory>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val response = supabase.postgrest.from("plantspot_user_plants_diagnosis_history")
+                    .select {
+                        filter { eq("plant_id", plantId) }
+                        order("created_at", Order.DESCENDING)
+                    }
+                val histories = response.decodeList<DiagnosisHistoryInsertDto>().map { dto ->
+                    PlantDiagnosisHistory(
+                        id = null, // DTO에 id가 없지만 조회용으로는 필요 시 추가 가능. 뷰에서는 시간/내용 표시 위주라 nullable 사용
+                        plantId = dto.plantId,
+                        healthStatus = dto.healthStatus,
+                        healthScore = dto.healthScore,
+                        analysis = dto.analysis,
+                        solution = dto.solution,
+                        imageUrl = dto.imageUrl, // 필요 시 signedUrl 변환 고려 가능 (public 버킷이라면 그대로 사용)
+                        createdAt = OffsetDateTime.parse(dto.createdAt)
+                    )
+                }
+                emit(histories)
+            }
+        }
+
+    override fun getAllDiagnosisHistory(): Flow<List<PlantDiagnosisHistory>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val response = supabase.postgrest.from("plantspot_user_plants_diagnosis_history")
+                    .select { order("created_at", Order.DESCENDING) }
+                val histories = response.decodeList<DiagnosisHistoryInsertDto>().map { dto ->
+                    PlantDiagnosisHistory(
+                        id = null,
+                        plantId = dto.plantId,
+                        healthStatus = dto.healthStatus,
+                        healthScore = dto.healthScore,
+                        analysis = dto.analysis,
+                        solution = dto.solution,
+                        imageUrl = dto.imageUrl,
+                        createdAt = OffsetDateTime.parse(dto.createdAt)
+                    )
+                }
+                emit(histories)
+            }
+        }
+
     /**
      * Private 버킷용: 서명된 URL(1시간 유효)을 생성해 반환합니다.
      * 메모 이미지 표시 시에는 이 URL을 사용합니다.

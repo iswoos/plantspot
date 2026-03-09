@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.studio.plantspot.domain.entity.PlantMemo
 import com.studio.plantspot.domain.entity.UserPlant
+import com.studio.plantspot.domain.entity.PlantDiagnosisHistory
+import com.studio.plantspot.presentation.ui.diagnosis.DiagnosisHistoryDialog
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -50,14 +53,17 @@ import kotlin.math.abs
 // 캘린더 / 타임라인에서 사용하는 이벤트 모델
 // ─────────────────────────────────────────────────────────────
 sealed class PlantEvent {
-    data class Watering(val date: LocalDate) : PlantEvent()
-    data class Memo(val date: LocalDate, val memo: PlantMemo) : PlantEvent()
+    abstract val date: LocalDate
+    data class Watering(override val date: LocalDate) : PlantEvent()
+    data class Memo(override val date: LocalDate, val memo: PlantMemo) : PlantEvent()
+    data class Diagnosis(override val date: LocalDate, val history: com.studio.plantspot.domain.entity.PlantDiagnosisHistory) : PlantEvent()
 }
 
 // ─────────────────────────────────────────────────────────────
-// 필터 타입
+// UI 모드 및 필터
 // ─────────────────────────────────────────────────────────────
-enum class EventFilter { ALL, WATERING, MEMO }
+enum class DetailTab { CALENDAR, MEMO, DIAGNOSIS }
+enum class EventFilter { ALL, WATERING, MEMO, DIAGNOSIS }
 enum class DisplayMode { CALENDAR, TIMELINE }
 
 // ─────────────────────────────────────────────────────────────
@@ -76,6 +82,7 @@ fun PlantDetailScreen(
     val uiState by viewModel.uiState.collectAsState()
     val memos by viewModel.memos.collectAsState()
     val wateringHistory by viewModel.wateringHistory.collectAsState()
+    val diagnosisHistory by viewModel.diagnosisHistory.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val snackbarMessage by viewModel.snackbarMessage.collectAsState()
 
@@ -110,6 +117,7 @@ fun PlantDetailScreen(
                         plant = state.plant,
                         memos = memos,
                         wateringHistory = wateringHistory,
+                        diagnosisHistory = diagnosisHistory,
                         isLoading = isLoading,
                         onBack = onBack,
                         onUpdateNickname = viewModel::updateNickname,
@@ -133,6 +141,7 @@ private fun PlantDetailContent(
     plant: UserPlant,
     memos: List<PlantMemo>,
     wateringHistory: List<OffsetDateTime>,
+    diagnosisHistory: List<com.studio.plantspot.domain.entity.PlantDiagnosisHistory>,
     isLoading: Boolean,
     onBack: () -> Unit,
     onUpdateNickname: (String) -> Unit,
@@ -147,12 +156,14 @@ private fun PlantDetailContent(
     var showAddMemoDialog by remember { mutableStateOf(false) }
     var editingMemo by remember { mutableStateOf<PlantMemo?>(null) }
     var viewingMemoDetail by remember { mutableStateOf<PlantMemo?>(null) }
+    var viewingDiagnosisHistory by remember { mutableStateOf<PlantDiagnosisHistory?>(null) }
 
     // 삭제 재확인 팝업 상태 (기존 longPressedMemo 대신 사용)
     var deleteConfirmMemo by remember { mutableStateOf<PlantMemo?>(null) }
 
     // 캘린더/타임라인 관련 상태
-    var eventFilter by remember { mutableStateOf(EventFilter.ALL) }
+    var currentTab by remember { mutableStateOf(DetailTab.CALENDAR) }
+    var selectedEventFilters by remember { mutableStateOf(setOf(EventFilter.ALL)) }
     var displayMode by remember { mutableStateOf(DisplayMode.CALENDAR) }
     var calendarMonth by remember { mutableStateOf(LocalDate.now().withDayOfMonth(1)) }
     var selectedCalendarDate by remember { mutableStateOf<LocalDate?>(LocalDate.now()) }
@@ -163,41 +174,34 @@ private fun PlantDetailContent(
     val detailDateFormatter = DateTimeFormatter.ofPattern("yyyy.MM.dd a h시 mm분", Locale.KOREAN)
 
     // 이벤트 맵 생성 (필터 미적용, 빠른 조회용)
-    val rawEventDayMap: Map<LocalDate, List<PlantEvent>> = remember(wateringHistory, memos) {
+    val rawEventDayMap: Map<LocalDate, List<PlantEvent>> = remember(wateringHistory, memos, diagnosisHistory) {
         val allRaw = wateringHistory.map { PlantEvent.Watering(it.atZoneSameInstant(systemZone).toLocalDate()) } +
-                memos.map { PlantEvent.Memo(it.createdAt.atZoneSameInstant(systemZone).toLocalDate(), it) }
-        allRaw.groupBy {
-            when(it) {
-                is PlantEvent.Watering -> it.date
-                is PlantEvent.Memo -> it.date
-            }
-        }
+                memos.map { PlantEvent.Memo(it.createdAt.atZoneSameInstant(systemZone).toLocalDate(), it) } +
+                diagnosisHistory.mapNotNull { hist ->
+                    hist.createdAt?.let { dt -> PlantEvent.Diagnosis(dt.atZoneSameInstant(systemZone).toLocalDate(), hist) }
+                }
+        allRaw.groupBy { it.date }
     }
 
-    // 필터링 적용된 목록
-    val filteredEvents: List<PlantEvent> = remember(wateringHistory, memos, eventFilter) {
-        val waterEvents = if (eventFilter != EventFilter.MEMO) {
+    // 필터링 적용된 목록 (다중 선택 대응)
+    val filteredEvents: List<PlantEvent> = remember(wateringHistory, memos, diagnosisHistory, selectedEventFilters) {
+        val waterEvents = if (selectedEventFilters.contains(EventFilter.ALL) || selectedEventFilters.contains(EventFilter.WATERING)) {
             wateringHistory.map { PlantEvent.Watering(it.atZoneSameInstant(systemZone).toLocalDate()) }
         } else emptyList()
-        val memoEvents = if (eventFilter != EventFilter.WATERING) {
+        val memoEvents = if (selectedEventFilters.contains(EventFilter.ALL) || selectedEventFilters.contains(EventFilter.MEMO)) {
             memos.map { PlantEvent.Memo(it.createdAt.atZoneSameInstant(systemZone).toLocalDate(), it) }
         } else emptyList()
-        
-        (waterEvents + memoEvents).sortedByDescending {
-            when (it) {
-                is PlantEvent.Watering -> it.date
-                is PlantEvent.Memo -> it.date
+        val diagEvents = if (selectedEventFilters.contains(EventFilter.ALL) || selectedEventFilters.contains(EventFilter.DIAGNOSIS)) {
+            diagnosisHistory.mapNotNull { hist ->
+                hist.createdAt?.let { dt -> PlantEvent.Diagnosis(dt.atZoneSameInstant(systemZone).toLocalDate(), hist) }
             }
-        }
+        } else emptyList()
+        
+        (waterEvents + memoEvents + diagEvents).sortedByDescending { it.date }
     }
 
     val filteredEventDayMap: Map<LocalDate, List<PlantEvent>> = remember(filteredEvents) {
-        filteredEvents.groupBy {
-            when (it) {
-                is PlantEvent.Watering -> it.date
-                is PlantEvent.Memo -> it.date
-            }
-        }
+        filteredEvents.groupBy { it.date }
     }
 
     // 다이얼로그 처리
@@ -265,6 +269,13 @@ private fun PlantDetailContent(
         )
     }
 
+    viewingDiagnosisHistory?.let { history ->
+        DiagnosisHistoryDialog(
+            history = history,
+            onDismiss = { viewingDiagnosisHistory = null }
+        )
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 80.dp)
@@ -310,132 +321,230 @@ private fun PlantDetailContent(
             )
         }
 
-        // ── 4. 캘린더/타임라인 헤더 및 필터
+        // ── 4. 탭 선택 (캘린더 / 메모 / 진단 내역)
         item {
-            Spacer(Modifier.height(20.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("기록 캘린더", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF1B5E20))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = displayMode == DisplayMode.CALENDAR,
-                        onClick = { displayMode = DisplayMode.CALENDAR },
-                        label = { Text("캘린더", fontSize = 12.sp) }
-                    )
-                    FilterChip(
-                        selected = displayMode == DisplayMode.TIMELINE,
-                        onClick = { displayMode = DisplayMode.TIMELINE },
-                        label = { Text("타임라인", fontSize = 12.sp) }
-                    )
+            Spacer(Modifier.height(16.dp))
+            TabRow(
+                selectedTabIndex = currentTab.ordinal,
+                containerColor = Color.Transparent,
+                contentColor = Color(0xFF2E7D32),
+                indicator = { tabPositions ->
+                    if (currentTab.ordinal < tabPositions.size) {
+                        TabRowDefaults.Indicator(
+                            Modifier.tabIndicatorOffset(tabPositions[currentTab.ordinal]),
+                            color = Color(0xFF2E7D32)
+                        )
+                    }
                 }
-            }
-            
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf(EventFilter.ALL to "전체", EventFilter.WATERING to "💧 물주기", EventFilter.MEMO to "📝 메모")
-                    .forEach { (filter, label) ->
-                        FilterChip(
-                            selected = eventFilter == filter,
-                            onClick = { eventFilter = filter },
-                            label = { Text(label, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF81C784).copy(alpha = 0.3f),
-                                selectedLabelColor = Color(0xFF1B5E20)
+                Tab(
+                    selected = currentTab == DetailTab.CALENDAR,
+                    onClick = { currentTab = DetailTab.CALENDAR },
+                    text = { Text("📅 기록 캘린더", fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+                )
+                Tab(
+                    selected = currentTab == DetailTab.MEMO,
+                    onClick = { currentTab = DetailTab.MEMO },
+                    text = { Text("📝 메모", fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+                )
+                Tab(
+                    selected = currentTab == DetailTab.DIAGNOSIS,
+                    onClick = { currentTab = DetailTab.DIAGNOSIS },
+                    text = { Text("🔍 진단 내역", fontWeight = FontWeight.Bold, fontSize = 14.sp) }
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
+        // ── 5. 탭 구성에 따른 콘텐츠 렌더링
+        when (currentTab) {
+            DetailTab.CALENDAR -> {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(
+                                selected = displayMode == DisplayMode.CALENDAR,
+                                onClick = { displayMode = DisplayMode.CALENDAR },
+                                label = { Text("캘린더", fontSize = 12.sp) }
                             )
-                        )
+                            FilterChip(
+                                selected = displayMode == DisplayMode.TIMELINE,
+                                onClick = { displayMode = DisplayMode.TIMELINE },
+                                label = { Text("타임라인", fontSize = 12.sp) }
+                            )
+                        }
                     }
-            }
-        }
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val onToggle = { filter: EventFilter ->
+                            selectedEventFilters = if (filter == EventFilter.ALL) {
+                                setOf(EventFilter.ALL)
+                            } else {
+                                val newSet = selectedEventFilters - EventFilter.ALL
+                                if (newSet.contains(filter)) {
+                                    (newSet - filter).ifEmpty { setOf(EventFilter.ALL) }
+                                } else {
+                                    newSet + filter
+                                }
+                            }
+                        }
 
-        // ── 5. 캘린더 or 타임라인 내용
-        item {
-            if (displayMode == DisplayMode.CALENDAR) {
-                CalendarView(
-                    calendarMonth = calendarMonth,
-                    eventDayMap = filteredEventDayMap,
-                    selectedDate = selectedCalendarDate,
-                    onPreviousMonth = { calendarMonth = calendarMonth.minusMonths(1) },
-                    onNextMonth = { calendarMonth = calendarMonth.plusMonths(1) },
-                    onDayClick = { date -> 
-                        selectedCalendarDate = if (selectedCalendarDate == date) null else date 
+                        listOf(
+                            EventFilter.ALL to "전체", 
+                            EventFilter.WATERING to "💧 물주기", 
+                            EventFilter.MEMO to "📝 메모",
+                            EventFilter.DIAGNOSIS to "🔍 진단"
+                        ).forEach { (filter, label) ->
+                            FilterChip(
+                                selected = selectedEventFilters.contains(filter),
+                                onClick = { onToggle(filter) },
+                                label = { Text(label, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF81C784).copy(alpha = 0.3f),
+                                    selectedLabelColor = Color(0xFF1B5E20)
+                                )
+                            )
+                        }
                     }
-                )
-                
-                // 선택된 날짜의 이벤트 목록 표시 (애니메이션 노출)
-                androidx.compose.animation.AnimatedVisibility(visible = selectedCalendarDate != null) {
-                    selectedCalendarDate?.let { date ->
-                        // 선택된 날짜의 이벤트는 필터와 무관하게 모든 이벤트를 보여줄지, 필터된 이벤트를 보여줄지에 따라 다름
-                        // 현재는 필터링된 이벤트를 기반으로 노출
-                        val dayEvents = filteredEventDayMap[date] ?: emptyList()
-                        SelectedDayEventsView(
-                            date = date,
-                            events = dayEvents,
+                }
+
+                item {
+                    if (displayMode == DisplayMode.CALENDAR) {
+                        CalendarView(
+                            calendarMonth = calendarMonth,
+                            eventDayMap = filteredEventDayMap,
+                            selectedDate = selectedCalendarDate,
+                            onPreviousMonth = { calendarMonth = calendarMonth.minusMonths(1) },
+                            onNextMonth = { calendarMonth = calendarMonth.plusMonths(1) },
+                            onDayClick = { date -> 
+                                selectedCalendarDate = if (selectedCalendarDate == date) null else date 
+                            }
+                        )
+                        
+                        androidx.compose.animation.AnimatedVisibility(visible = selectedCalendarDate != null) {
+                            selectedCalendarDate?.let { date ->
+                                val dayEvents = filteredEventDayMap[date] ?: emptyList()
+                                SelectedDayEventsView(
+                                    date = date,
+                                    events = dayEvents,
+                                    dateFormatter = defaultDateFormatter,
+                                    onMemoClick = { memo -> viewingMemoDetail = memo },
+                                    onDiagnosisClick = { history -> viewingDiagnosisHistory = history }
+                                )
+                            }
+                        }
+                    } else {
+                        TimelineView(
+                            events = filteredEvents, 
                             dateFormatter = defaultDateFormatter,
-                            onMemoClick = { memo -> viewingMemoDetail = memo }
+                            onMemoClick = { memo -> viewingMemoDetail = memo },
+                            onDiagnosisClick = { history -> viewingDiagnosisHistory = history }
                         )
                     }
                 }
-            } else {
-                TimelineView(
-                    events = filteredEvents, 
-                    dateFormatter = defaultDateFormatter,
-                    onMemoClick = { memo -> viewingMemoDetail = memo }
-                )
             }
-        }
+            DetailTab.MEMO -> {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFF2E7D32), strokeWidth = 2.dp)
+                        } else {
+                            TextButton(onClick = { showAddMemoDialog = true }) {
+                                Text("+ 메모 첨부", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
 
-        // ── 6. 메모 섹션 헤더
-        item {
-            Spacer(Modifier.height(20.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("메모", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFF1B5E20))
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color(0xFF2E7D32), strokeWidth = 2.dp)
+                if (memos.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text("메모가 없습니다. 메모를 추가해 보세요! 📝", color = Color.LightGray, fontSize = 14.sp)
+                        }
+                    }
                 } else {
-                    TextButton(onClick = { showAddMemoDialog = true }) {
-                        Text("+ 메모 첨부", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+                    items(memos, key = { it.id }) { memo ->
+                        MemoCard(
+                            memo = memo,
+                            dateFormatter = defaultDateFormatter,
+                            onClick = { viewingMemoDetail = memo },
+                            onEdit = {
+                                viewingMemoDetail = null
+                                editingMemo = memo
+                            },
+                            onDelete = {
+                                viewingMemoDetail = null
+                                deleteConfirmMemo = memo
+                            }
+                        )
                     }
                 }
             }
-        }
-
-        // ── 7. 메모 카드 목록
-        if (memos.isEmpty()) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text("메모가 없습니다. 이벤트 추가 버튼을 눌러주세요! 📝", color = Color.LightGray, fontSize = 14.sp)
-                }
-            }
-        } else {
-            items(memos, key = { it.id }) { memo ->
-                MemoCard(
-                    memo = memo,
-                    dateFormatter = defaultDateFormatter,
-                    onClick = { viewingMemoDetail = memo },
-                    onEdit = {
-                        viewingMemoDetail = null
-                        editingMemo = memo
-                    },
-                    onDelete = {
-                        viewingMemoDetail = null
-                        deleteConfirmMemo = memo
+            DetailTab.DIAGNOSIS -> {
+                if (diagnosisHistory.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                            Text("진단 내역이 없습니다. AI 진단을 이용해 보세요! 🔍", color = Color.LightGray, fontSize = 14.sp)
+                        }
                     }
-                )
+                } else {
+                    items(diagnosisHistory, key = { it.id ?: it.hashCode() }) { history ->
+                        val mood = when (history.healthScore) {
+                            in 90..100 -> "매우 좋음"
+                            in 70..89 -> "좋음"
+                            in 50..69 -> "보통"
+                            in 30..49 -> "나쁨"
+                            else -> "매우 나쁨"
+                        }
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                .clickable { viewingDiagnosisHistory = history },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFFFF59D)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text("🔍", fontSize = 24.sp)
+                                }
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("기분 : $mood", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF1B5E20))
+                                    Text("건강도 : ${history.healthScore}점", fontSize = 13.sp, color = Color(0xFF4CAF50))
+                                    Spacer(Modifier.height(4.dp))
+                                    val dateStr = history.createdAt?.atZoneSameInstant(systemZone)
+                                        ?.toLocalDate()?.format(defaultDateFormatter) ?: "날짜 미상"
+                                    Text(dateStr, fontSize = 11.sp, color = Color.LightGray)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -625,22 +734,24 @@ private fun CalendarView(
                             val events = eventDayMap[date] ?: emptyList()
                             val hasWatering = events.any { it is PlantEvent.Watering }
                             val hasMemo = events.any { it is PlantEvent.Memo }
+                            val hasDiag = events.any { it is PlantEvent.Diagnosis }
                             val isToday = date == LocalDate.now()
                             val isSelected = date == selectedDate
 
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .height(52.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable { onDayClick(date) }
                                     .background(if (isSelected) Color(0xFFE8F5E9) else Color.Transparent),
                                 horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
+                                verticalArrangement = Arrangement.Top
                             ) {
+                                Spacer(Modifier.height(4.dp))
                                 Box(
                                     modifier = Modifier
-                                        .size(26.dp)
+                                        .size(24.dp)
                                         .clip(CircleShape)
                                         .background(if (isToday) Color(0xFF2E7D32) else Color.Transparent),
                                     contentAlignment = Alignment.Center
@@ -652,9 +763,19 @@ private fun CalendarView(
                                         fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
-                                Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.height(14.dp)) {
-                                    if (hasWatering) Text("💧", fontSize = 10.sp)
-                                    if (hasMemo) Text("📝", fontSize = 10.sp)
+                                val iconsList = mutableListOf<String>()
+                                if (hasWatering) iconsList.add("💧")
+                                if (hasMemo) iconsList.add("📝")
+                                if (hasDiag) iconsList.add("🔍")
+
+                                if (iconsList.isNotEmpty()) {
+                                    Spacer(Modifier.height(2.dp))
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally), 
+                                        modifier = Modifier.fillMaxWidth().wrapContentHeight()
+                                    ) {
+                                        iconsList.forEach { Text(it, fontSize = 10.sp, lineHeight = 10.sp) }
+                                    }
                                 }
                             }
                         }
@@ -670,7 +791,8 @@ private fun SelectedDayEventsView(
     date: LocalDate,
     events: List<PlantEvent>,
     dateFormatter: DateTimeFormatter,
-    onMemoClick: (PlantMemo) -> Unit
+    onMemoClick: (PlantMemo) -> Unit,
+    onDiagnosisClick: (com.studio.plantspot.domain.entity.PlantDiagnosisHistory) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -693,6 +815,7 @@ private fun SelectedDayEventsView(
                             color = Color(0xFF64B5F6),
                             title = "물 주기 완료",
                             subtitle = "",
+                            dateString = null,
                             onClick = null
                         )
                     }
@@ -700,9 +823,27 @@ private fun SelectedDayEventsView(
                         TimelineItem(
                             icon = "📝",
                             color = Color(0xFFFFF59D),
-                            title = "메모: ${event.memo.content.take(20)}${if (event.memo.content.length > 20) "…" else ""}",
-                            subtitle = "상세 내용을 보려면 클릭하세요",
+                            title = "식물 메모",
+                            subtitle = "${event.memo.content.take(20)}${if (event.memo.content.length > 20) "…" else ""}",
+                            dateString = null,
                             onClick = { onMemoClick(event.memo) }
+                        )
+                    }
+                    is PlantEvent.Diagnosis -> {
+                        val mood = when (event.history.healthScore) {
+                            in 90..100 -> "매우 좋음"
+                            in 70..89 -> "좋음"
+                            in 50..69 -> "보통"
+                            in 30..49 -> "나쁨"
+                            else -> "매우 나쁨"
+                        }
+                        TimelineItem(
+                            icon = "🔍",
+                            color = Color(0xFFFFF59D),
+                            title = "진단 이력",
+                            subtitle = "기분 : $mood",
+                            dateString = null,
+                            onClick = { onDiagnosisClick(event.history) }
                         )
                     }
                 }
@@ -718,7 +859,8 @@ private fun SelectedDayEventsView(
 private fun TimelineView(
     events: List<PlantEvent>,
     dateFormatter: DateTimeFormatter,
-    onMemoClick: (PlantMemo) -> Unit
+    onMemoClick: (PlantMemo) -> Unit,
+    onDiagnosisClick: (com.studio.plantspot.domain.entity.PlantDiagnosisHistory) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -739,7 +881,8 @@ private fun TimelineView(
                             icon = "💧",
                             color = Color(0xFF64B5F6),
                             title = "물 주기 완료",
-                            subtitle = event.date.format(dateFormatter),
+                            subtitle = "",
+                            dateString = event.date.format(dateFormatter),
                             onClick = null
                         )
                     }
@@ -747,9 +890,27 @@ private fun TimelineView(
                         TimelineItem(
                             icon = "📝",
                             color = Color(0xFFFFF59D),
-                            title = "메모: ${event.memo.content.take(20)}${if (event.memo.content.length > 20) "…" else ""}",
-                            subtitle = event.date.format(dateFormatter),
+                            title = "식물 메모",
+                            subtitle = "${event.memo.content.take(20)}${if (event.memo.content.length > 20) "…" else ""}",
+                            dateString = event.date.format(dateFormatter),
                             onClick = { onMemoClick(event.memo) }
+                        )
+                    }
+                    is PlantEvent.Diagnosis -> {
+                        val mood = when (event.history.healthScore) {
+                            in 90..100 -> "매우 좋음"
+                            in 70..89 -> "좋음"
+                            in 50..69 -> "보통"
+                            in 30..49 -> "나쁨"
+                            else -> "매우 나쁨"
+                        }
+                        TimelineItem(
+                            icon = "🔍",
+                            color = Color(0xFFFFF59D),
+                            title = "진단 이력",
+                            subtitle = "기분 : $mood",
+                            dateString = event.date.format(dateFormatter),
+                            onClick = { onDiagnosisClick(event.history) }
                         )
                     }
                 }
@@ -759,7 +920,7 @@ private fun TimelineView(
 }
 
 @Composable
-private fun TimelineItem(icon: String, color: Color, title: String, subtitle: String, onClick: (() -> Unit)?) {
+private fun TimelineItem(icon: String, color: Color, title: String, subtitle: String, dateString: String? = null, onClick: (() -> Unit)?) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -768,17 +929,24 @@ private fun TimelineItem(icon: String, color: Color, title: String, subtitle: St
             .clickable(enabled = onClick != null) { onClick?.invoke() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Box(
-            modifier = Modifier.size(36.dp).clip(CircleShape).background(color.copy(alpha = 0.4f)),
+            modifier = Modifier.size(40.dp).clip(CircleShape).background(color.copy(alpha = 0.4f)),
             contentAlignment = Alignment.Center
         ) {
-            Text(icon, fontSize = 18.sp)
+            Text(icon, fontSize = 20.sp)
         }
-        Column {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color(0xFF1B5E20))
-            Text(subtitle, fontSize = 12.sp, color = Color.Gray)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Color(0xFF1B5E20))
+            if (subtitle.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(text = subtitle, fontSize = 13.sp, color = Color.Gray)
+            }
+            if (!dateString.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(text = dateString, fontSize = 11.sp, color = Color.LightGray)
+            }
         }
     }
 }

@@ -25,6 +25,10 @@ interface PlantRepository {
     suspend fun deletePlantMemo(memoId: String)
     fun getWateringHistory(plantId: String): Flow<List<OffsetDateTime>>
     
+    // 진단 이력 관련
+    fun getPlantDiagnosisHistory(plantId: String): Flow<List<PlantDiagnosisHistory>>
+    fun getAllDiagnosisHistory(): Flow<List<PlantDiagnosisHistory>>
+    
     // 통합 캘린더 페이지용 전역 데이터 메서드
     fun getAllWateringHistory(): Flow<List<Pair<String, OffsetDateTime>>> // plantId to Date
     fun getAllPlantMemos(): Flow<List<PlantMemo>>

@@ -49,7 +49,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 // 통합 캘린더용 필터 추가
-enum class IntegratedEventFilter { ALL, WATERING, PLANT_MEMO, GENERAL_MEMO }
+enum class IntegratedEventFilter { ALL, WATERING, PLANT_MEMO, GENERAL_MEMO, DIAGNOSIS }
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -132,49 +132,44 @@ private fun IntegratedCalendarContent(
     var selectedDate by remember { mutableStateOf<LocalDate?>(LocalDate.now()) }
     
     // 필터 상태
-    var eventTypeFilter by remember { mutableStateOf(IntegratedEventFilter.ALL) }
-    // 다중 선택 지원 (null: 전체 이벤트, "GENERAL": 일반 메모, 그외: 식물 ID)
+    var selectedEventTypes by remember { mutableStateOf(setOf(IntegratedEventFilter.ALL)) }
+    // 다중 선택 지원 (null: 전체 이벤트, 대상 식별자)
     var selectedTargetFilters by remember { mutableStateOf(setOf<String?>(null)) }
 
     // 다이얼로그 상태
     var viewingEvent by remember { mutableStateOf<IntegratedEvent?>(null) }
 
-    val defaultDateFormatter = DateTimeFormatter.ofPattern("yyyy. MM. dd a hh:mm", Locale.KOREA)
+    val defaultDateFormatter = DateTimeFormatter.ofPattern("yyyy. MM. dd", Locale.KOREA)
     val monthFormatter = DateTimeFormatter.ofPattern("yyyy년 M월", Locale.KOREA)
 
-    // 필터 적용
-    val filteredEvents = remember(state.events, eventTypeFilter, selectedTargetFilters) {
+    // 필터 적용 단 -- 타임라인 전용
+    val filteredEvents = remember(state.events, selectedEventTypes, selectedTargetFilters) {
         state.events.filter { event ->
-            // 1. 일반 메모 예외 처리: Row 1에서 전체 또는 일반 메모가 선택된 상태라면 Row 2 타입 필터와 무관하게 표시
-            if (event is IntegratedEvent.GeneralMemo) {
-                if (selectedTargetFilters.contains(null) || selectedTargetFilters.contains("GENERAL")) {
-                    return@filter true
-                }
-            }
-
-            // 2. 대상 필터 (다중 선택 합집합)
             val targetMatched = if (selectedTargetFilters.contains(null)) {
-                true // 전체 이벤트
+                true
             } else {
                 when (event) {
                     is IntegratedEvent.Watering -> selectedTargetFilters.contains(event.plantId)
                     is IntegratedEvent.PlantSpecificMemo -> selectedTargetFilters.contains(event.plantId)
-                    else -> false // GeneralMemo는 위에서 이미 처리됨
+                    is IntegratedEvent.PlantDiagnosis -> selectedTargetFilters.contains(event.plantId)
+                    is IntegratedEvent.GeneralMemo -> true
                 }
             }
-
-            // 3. 타입 필터 (교집합)
-            val typeMatched = when (eventTypeFilter) {
-                IntegratedEventFilter.ALL -> true
-                IntegratedEventFilter.WATERING -> event is IntegratedEvent.Watering
-                IntegratedEventFilter.PLANT_MEMO -> event is IntegratedEvent.PlantSpecificMemo
-                IntegratedEventFilter.GENERAL_MEMO -> event is IntegratedEvent.GeneralMemo
+            val typeMatched = if (selectedEventTypes.contains(IntegratedEventFilter.ALL)) {
+                true
+            } else {
+                when (event) {
+                    is IntegratedEvent.Watering -> selectedEventTypes.contains(IntegratedEventFilter.WATERING)
+                    is IntegratedEvent.PlantSpecificMemo -> selectedEventTypes.contains(IntegratedEventFilter.PLANT_MEMO)
+                    is IntegratedEvent.GeneralMemo -> selectedEventTypes.contains(IntegratedEventFilter.GENERAL_MEMO)
+                    is IntegratedEvent.PlantDiagnosis -> selectedEventTypes.contains(IntegratedEventFilter.DIAGNOSIS)
+                }
             }
-
             targetMatched && typeMatched
         }
     }
 
+    // 달력 그리드용: 필터도 적용된 이벤트만
     val eventDayMap = remember(filteredEvents) {
         filteredEvents.groupBy { it.date }
     }
@@ -206,26 +201,7 @@ private fun IntegratedCalendarContent(
                     )
                 }
 
-                // 일반 메모
-                item {
-                    val isSelected = selectedTargetFilters.contains("GENERAL")
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            selectedTargetFilters = if (isSelected) {
-                                (selectedTargetFilters - "GENERAL").ifEmpty { setOf(null) }
-                            } else {
-                                (selectedTargetFilters - null) + "GENERAL"
-                            }
-                        },
-                        label = { Text("📝 일반 메모") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFFE8F5E9),
-                            selectedLabelColor = Color(0xFF2E7D32)
-                        )
-                    )
-                }
-
+                // 삭제된 영역 (기존 Row 1의 일반 메모)
                 // 식물 목록
                 items(state.plants) { plant ->
                     val isSelected = selectedTargetFilters.contains(plant.id)
@@ -261,32 +237,59 @@ private fun IntegratedCalendarContent(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val onTypeToggle = { type: IntegratedEventFilter ->
+                        selectedEventTypes = if (type == IntegratedEventFilter.ALL) {
+                            setOf(IntegratedEventFilter.ALL)
+                        } else {
+                            val newSet = selectedEventTypes - IntegratedEventFilter.ALL
+                            if (newSet.contains(type)) {
+                                (newSet - type).ifEmpty { setOf(IntegratedEventFilter.ALL) }
+                            } else {
+                                newSet + type
+                            }
+                        }
+                    }
+
                     item {
                         FilterChip(
-                            selected = eventTypeFilter == IntegratedEventFilter.ALL,
-                            onClick = { eventTypeFilter = IntegratedEventFilter.ALL },
+                            selected = selectedEventTypes.contains(IntegratedEventFilter.ALL),
+                            onClick = { onTypeToggle(IntegratedEventFilter.ALL) },
                             label = { Text("전체") }
                         )
                     }
                     item {
                         FilterChip(
-                            selected = eventTypeFilter == IntegratedEventFilter.WATERING,
-                            onClick = { eventTypeFilter = IntegratedEventFilter.WATERING },
+                            selected = selectedEventTypes.contains(IntegratedEventFilter.GENERAL_MEMO),
+                            onClick = { onTypeToggle(IntegratedEventFilter.GENERAL_MEMO) },
+                            label = { Text("📝 일반 메모") }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedEventTypes.contains(IntegratedEventFilter.WATERING),
+                            onClick = { onTypeToggle(IntegratedEventFilter.WATERING) },
                             label = { Text("💧 물 주기") }
                         )
                     }
                     item {
                         FilterChip(
-                            selected = eventTypeFilter == IntegratedEventFilter.PLANT_MEMO,
-                            onClick = { eventTypeFilter = IntegratedEventFilter.PLANT_MEMO },
+                            selected = selectedEventTypes.contains(IntegratedEventFilter.PLANT_MEMO),
+                            onClick = { onTypeToggle(IntegratedEventFilter.PLANT_MEMO) },
                             label = { Text("🪴 식물 메모") }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedEventTypes.contains(IntegratedEventFilter.DIAGNOSIS),
+                            onClick = { onTypeToggle(IntegratedEventFilter.DIAGNOSIS) },
+                            label = { Text("🔍 진단") }
                         )
                     }
                 }
             }
         }
 
-        // 캘린더/타임라인 컨텐츠
+        // 콘텐츠 영역: 캘린더 vs 타임라인
         if (displayMode == DisplayMode.CALENDAR) {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 item {
@@ -314,10 +317,12 @@ private fun IntegratedCalendarContent(
                 }
             }
         } else {
+            // 타임라인: weight(1f)로 LazyColumn이 남은 bounded 공간을 정확히 받아야 크래시 방지
             IntegratedTimelineView(
                 events = filteredEvents,
                 dateFormatter = defaultDateFormatter,
-                onEventClick = { viewingEvent = it }
+                onEventClick = { viewingEvent = it },
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -431,6 +436,7 @@ private fun IntegratedCalendarGridView(
                             val hasWatering = events.any { it is IntegratedEvent.Watering }
                             val hasPlantMemo = events.any { it is IntegratedEvent.PlantSpecificMemo }
                             val hasGenMemo = events.any { it is IntegratedEvent.GeneralMemo }
+                            val hasDiagnosis = events.any { it is IntegratedEvent.PlantDiagnosis }
 
                             val isToday = date == LocalDate.now()
                             val isSelected = date == selectedDate
@@ -438,7 +444,7 @@ private fun IntegratedCalendarGridView(
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(56.dp) // 높이 약간 증가
+                                    .height(64.dp) // 4개 이모티콘 2x2 표시 공간 확보
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable { onDayClick(date) }
                                     .background(if (isSelected) Color(0xFFE8F5E9) else Color.Transparent),
@@ -461,13 +467,32 @@ private fun IntegratedCalendarGridView(
                                     )
                                 }
                                 Spacer(Modifier.height(2.dp))
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally), 
-                                    modifier = Modifier.fillMaxWidth().height(14.dp)
-                                ) {
-                                    if (hasWatering) Text("💧", fontSize = 10.sp)
-                                    if (hasPlantMemo) Text("🪴", fontSize = 10.sp)
-                                    if (hasGenMemo) Text("📝", fontSize = 10.sp)
+                                // 이모티콘 존재 여부를 일반 목록으로 수집
+                                val iconList = mutableListOf<String>()
+                                if (hasWatering) iconList.add("💧")
+                                if (hasPlantMemo) iconList.add("🪴")
+                                if (hasGenMemo) iconList.add("📝")
+                                if (hasDiagnosis) iconList.add("🔍")
+                                
+                                if (iconList.size <= 2) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+                                        modifier = Modifier.fillMaxWidth().wrapContentHeight() // height 제한 해제 및 패딩 방지
+                                    ) {
+                                        iconList.forEach { Text(it, fontSize = 10.sp, lineHeight = 10.sp) }
+                                    }
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        modifier = Modifier.fillMaxWidth().wrapContentHeight()
+                                    ) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.wrapContentHeight()) {
+                                            iconList.take(2).forEach { Text(it, fontSize = 10.sp, lineHeight = 10.sp) }
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.wrapContentHeight()) {
+                                            iconList.drop(2).take(2).forEach { Text(it, fontSize = 10.sp, lineHeight = 10.sp) }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -525,10 +550,11 @@ private fun IntegratedDayEventsView(
 private fun IntegratedTimelineView(
     events: List<IntegratedEvent>,
     dateFormatter: DateTimeFormatter,
-    onEventClick: (IntegratedEvent) -> Unit
+    onEventClick: (IntegratedEvent) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     LazyColumn(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(vertical = 16.dp),
@@ -587,6 +613,20 @@ private fun IntegratedEventItem(
             subtitleText = event.memo.title
             clickEnabled = true
         }
+        is IntegratedEvent.PlantDiagnosis -> {
+            val mood = when (event.history.healthScore) {
+                in 90..100 -> "매우 좋음"
+                in 70..89 -> "좋음"
+                in 50..69 -> "보통"
+                in 30..49 -> "나쁨"
+                else -> "매우 나쁨"
+            }
+            icon = "🔍"
+            bgColor = Color(0xFFFFF59D)
+            titleText = "[${event.plantNickname}] 진단 이력"
+            subtitleText = "기분 : $mood"
+            clickEnabled = true // 다이얼로그 연동 예정
+        }
     }
 
     Row(
@@ -612,6 +652,8 @@ private fun IntegratedEventItem(
             Text(text = titleText, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF333333))
             Spacer(Modifier.height(2.dp))
             Text(text = subtitleText, fontSize = 13.sp, color = Color.Gray)
+            Spacer(Modifier.height(4.dp))
+            Text(text = event.date.format(dateFormatter), fontSize = 11.sp, color = Color.LightGray)
         }
     }
 }
@@ -628,6 +670,15 @@ private fun IntegratedEventDetailDialog(
     viewModel: IntegratedCalendarViewModel
 ) {
     if (event is IntegratedEvent.Watering) return
+    
+    // 진단 다이얼로그 호출 (편집 불가, 단순 조회)
+    if (event is IntegratedEvent.PlantDiagnosis) {
+        com.studio.plantspot.presentation.ui.diagnosis.DiagnosisHistoryDialog(
+            history = event.history,
+            onDismiss = onDismiss
+        )
+        return
+    }
     
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var isEditing by remember { mutableStateOf(false) }

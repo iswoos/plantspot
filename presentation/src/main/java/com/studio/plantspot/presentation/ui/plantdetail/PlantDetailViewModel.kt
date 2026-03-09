@@ -33,6 +33,9 @@ class PlantDetailViewModel @Inject constructor(
     private val _wateringHistory = MutableStateFlow<List<OffsetDateTime>>(emptyList())
     val wateringHistory: StateFlow<List<OffsetDateTime>> = _wateringHistory.asStateFlow()
 
+    private val _diagnosisHistory = MutableStateFlow<List<com.studio.plantspot.domain.entity.PlantDiagnosisHistory>>(emptyList())
+    val diagnosisHistory: StateFlow<List<com.studio.plantspot.domain.entity.PlantDiagnosisHistory>> = _diagnosisHistory.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -77,6 +80,17 @@ class PlantDetailViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 // 급수 이력 오류는 non-fatal
+            }
+        }
+
+        // 4. 진단 이력 스트림 수집 (별도 코루틴)
+        viewModelScope.launch {
+            try {
+                plantRepository.getPlantDiagnosisHistory(plantId).collect { history ->
+                    _diagnosisHistory.value = history
+                }
+            } catch (e: Exception) {
+                // 진단 이력 오류는 non-fatal
             }
         }
     }

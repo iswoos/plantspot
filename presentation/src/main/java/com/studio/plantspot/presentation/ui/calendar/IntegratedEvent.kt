@@ -37,4 +37,14 @@ sealed class IntegratedEvent {
         override val date: LocalDate,
         val memo: Memo
     ) : IntegratedEvent()
+
+    /**
+     * 식물 진단 내역 이벤트
+     */
+    data class PlantDiagnosis(
+        override val date: LocalDate,
+        val plantId: String,
+        val plantNickname: String,
+        val history: com.studio.plantspot.domain.entity.PlantDiagnosisHistory
+    ) : IntegratedEvent()
 }

@@ -54,8 +54,9 @@ class IntegratedCalendarViewModel @Inject constructor(
                     plantRepository.getUserPlants(),
                     plantRepository.getAllWateringHistory(),
                     plantRepository.getAllPlantMemos(),
+                    plantRepository.getAllDiagnosisHistory(),
                     memoRepository.getMemos()
-                ) { plants, allWateringMap, allPlantMemos, generalMemos ->
+                ) { plants, allWateringMap, allPlantMemos, allDiagnosis, generalMemos ->
                     
                     val combinedEvents = mutableListOf<IntegratedEvent>()
                     val plantMap = plants.associateBy { it.id }
@@ -89,7 +90,23 @@ class IntegratedCalendarViewModel @Inject constructor(
                         }
                     }
 
-                    // 3. 일반 메모 맵핑
+                    // 3. 진단 이력 맵핑
+                    allDiagnosis.forEach { hist ->
+                        val plant = plantMap[hist.plantId]
+                        val createdAt = hist.createdAt
+                        if (plant != null && createdAt != null) {
+                            combinedEvents.add(
+                                IntegratedEvent.PlantDiagnosis(
+                                    date = createdAt.atZoneSameInstant(systemZone).toLocalDate(),
+                                    plantId = hist.plantId,
+                                    plantNickname = plant.nickname,
+                                    history = hist
+                                )
+                            )
+                        }
+                    }
+
+                    // 4. 일반 메모 맵핑
                     generalMemos.forEach { memo ->
                         combinedEvents.add(
                             IntegratedEvent.GeneralMemo(
