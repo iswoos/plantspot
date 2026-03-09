@@ -2,8 +2,10 @@ package com.studio.plantspot.di
 
 import com.studio.plantspot.data.repository.DiagnosisRepositoryImpl
 import com.studio.plantspot.data.repository.FileRepositoryImpl
+import com.studio.plantspot.data.repository.MemoRepositoryImpl
 import com.studio.plantspot.domain.repository.DiagnosisRepository
 import com.studio.plantspot.domain.repository.FileRepository
+import com.studio.plantspot.domain.repository.MemoRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,4 +27,10 @@ abstract class RepositoryModule {
     abstract fun bindFileRepository(
         impl: FileRepositoryImpl
     ): FileRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMemoRepository(
+        impl: MemoRepositoryImpl
+    ): MemoRepository
 }

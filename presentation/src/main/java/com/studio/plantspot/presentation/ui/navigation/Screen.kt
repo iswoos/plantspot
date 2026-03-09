@@ -23,6 +23,9 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object DiagnosisSpot : Screen("diagnosis_spot/{mode}", "위치 선택")
     object DiagnosisLight : Screen("diagnosis_light/{mode}", "조도 측정")
     object DiagnosisResult : Screen("diagnosis_result/{mode}", "진단 결과")
+
+    // Plant Detail
+    object PlantDetail : Screen("plant_detail/{plantId}", "식물 상세")
 }
 
 val bottomNavItems = listOf(

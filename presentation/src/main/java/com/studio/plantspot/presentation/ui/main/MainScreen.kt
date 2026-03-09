@@ -10,9 +10,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -55,7 +58,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.studio.plantspot.domain.entity.UserProfile
-import com.studio.plantspot.presentation.ui.calendar.CalendarScreen
+import com.studio.plantspot.presentation.ui.calendar.IntegratedCalendarScreen
 import com.studio.plantspot.presentation.ui.memo.MemoScreen
 import com.studio.plantspot.presentation.ui.home.HomeScreen
 import com.studio.plantspot.presentation.ui.lounge.LoungeScreen
@@ -63,12 +66,16 @@ import com.studio.plantspot.presentation.ui.navigation.Screen
 import com.studio.plantspot.presentation.ui.navigation.bottomNavItems
 import com.studio.plantspot.presentation.ui.diagnosis.PlantSelectionBottomSheet
 import com.studio.plantspot.presentation.ui.diagnosis.DiagnosisViewModel
+import com.studio.plantspot.presentation.ui.plantdetail.PlantDetailScreen
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 
 @Composable
 fun MainScreen(
     user: UserProfile?,
     viewModel: DiagnosisViewModel,
-    onNavigateToDiagnosis: (String) -> Unit = {}
+    onNavigateToDiagnosis: (String) -> Unit = {},
+    onNavigateToDetail: (String) -> Unit = {}
 ) {
     val navController = rememberNavController()
     val context = LocalContext.current
@@ -149,9 +156,9 @@ fun MainScreen(
             floatingActionButton = {
                 LargeFloatingActionButton(
                     onClick = {
-                        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                        val hasPermission = ContextCompat.checkSelfPermission(
                             context, Manifest.permission.CAMERA
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        ) == PackageManager.PERMISSION_GRANTED
                         
                         if (hasPermission) {
                             isScannerExpanded = !isScannerExpanded
@@ -160,18 +167,43 @@ fun MainScreen(
                         }
                     },
                     shape = CircleShape,
-                    containerColor = Color(0xFF2E7D32),
+                    containerColor = if (isScannerExpanded) Color(0xFF555555) else Color(0xFF2E7D32),
                     contentColor = Color.White,
                     modifier = Modifier
                         .size(64.dp)
                         .offset(y = 50.dp)
                 ) {
-                    Crossfade(targetState = isScannerExpanded) { expanded ->
-                        Icon(
-                            imageVector = if (expanded) Icons.Default.Close else Icons.Default.Add,
-                            contentDescription = "Smart Scanner",
-                            modifier = Modifier.size(32.dp)
-                        )
+                    // Crossfade 대신 Box로 고정 크기를 잡아 레이아웃 충돌 방지
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        if (isScannerExpanded) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "닫기",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Search,
+                                    contentDescription = "스마트 스캐너",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                                Text(
+                                    text = "스캔",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -188,12 +220,39 @@ fun MainScreen(
                         onNavigateToDiagnosis = { plantId ->
                             viewModel.setSelectedPlantId(plantId)
                             onNavigateToDiagnosis("DIAGNOSE")
+                        },
+                        onNavigateToDetail = { plantId ->
+                            navController.navigate("plant_detail/$plantId")
                         }
                     ) 
                 }
-                composable(Screen.Memo.route) { MemoScreen() }
-                composable(Screen.Calendar.route) { CalendarScreen() }
+                composable(Screen.Memo.route) {
+                    MemoScreen()
+                }
+                composable(Screen.Calendar.route) { IntegratedCalendarScreen() }
                 composable(Screen.Lounge.route) { LoungeScreen() }
+                composable(
+                    route = Screen.PlantDetail.route,
+                    arguments = listOf(navArgument("plantId") { type = NavType.StringType }),
+                    enterTransition = {
+                        slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300))
+                    },
+                    exitTransition = {
+                        fadeOut(animationSpec = tween(300))
+                    },
+                    popEnterTransition = {
+                        fadeIn(animationSpec = tween(300))
+                    },
+                    popExitTransition = {
+                        slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300))
+                    }
+                ) { backStackEntry ->
+                    val plantId = backStackEntry.arguments?.getString("plantId") ?: return@composable
+                    PlantDetailScreen(
+                        plantId = plantId,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
 
@@ -212,7 +271,7 @@ fun MainScreen(
             ) {
                 Row(
                     modifier = Modifier
-                        .padding(bottom = 140.dp)
+                        .padding(bottom = 180.dp)
                         .padding(horizontal = 24.dp)
                         .fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -229,8 +288,8 @@ fun MainScreen(
                     )
                     DiagnosisCard(
                         modifier = Modifier.weight(1f),
-                        title = "식물 진단",
-                        description = "초록이의 건강 체크!\n지금 기분이 어떤지 봐요.",
+                        title = "식물 입양 & 진단",
+                        description = "새 식물 입양 또는\n기존 식물의 기분 체크!",
                         icon = Icons.Default.Face,
                         onClick = {
                             isScannerExpanded = false
@@ -274,9 +333,10 @@ fun DiagnosisCard(
             modifier = Modifier
                 .padding(16.dp)
                 .fillMaxSize(),
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.height(12.dp))
             Surface(
                 shape = CircleShape,
                 color = Color(0xFFE8F5E9),
@@ -293,7 +353,7 @@ fun DiagnosisCard(
             Text(
                 text = title,
                 fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
+                fontSize = 16.sp,
                 color = Color(0xFF2E7D32)
             )
             Spacer(modifier = Modifier.height(8.dp))

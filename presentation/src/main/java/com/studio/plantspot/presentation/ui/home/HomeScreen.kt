@@ -57,7 +57,8 @@ import androidx.compose.foundation.lazy.grid.items
 fun HomeScreen(
     user: UserProfile?,
     viewModel: HomeViewModel = hiltViewModel(),
-    onNavigateToDiagnosis: (String) -> Unit = {}
+    onNavigateToDiagnosis: (String) -> Unit = {},
+    onNavigateToDetail: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
     
@@ -170,7 +171,8 @@ fun HomeScreen(
                         onShareClick = { plant ->
                             sharingPlant = plant
                             showMemoDialog = true
-                        }
+                        },
+                        onDetailClick = onNavigateToDetail
                     )
                 }
                 is HomeUiState.Error -> {
@@ -226,7 +228,8 @@ fun PlantGridSection(
     plants: List<UserPlantUiModel>,
     viewModel: HomeViewModel,
     onNavigateToDiagnosis: (String) -> Unit,
-    onShareClick: (UserPlantUiModel) -> Unit
+    onShareClick: (UserPlantUiModel) -> Unit,
+    onDetailClick: (String) -> Unit = {}
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -244,7 +247,8 @@ fun PlantGridSection(
                 onWaterClick = { viewModel.waterPlant(plant.id) },
                 onDiagnosisClick = { onNavigateToDiagnosis(plant.id) },
                 onShareClick = { onShareClick(plant) },
-                onCancelWaterClick = { viewModel.cancelWatering(plant.id) }
+                onCancelWaterClick = { viewModel.cancelWatering(plant.id) },
+                onDetailClick = { onDetailClick(plant.id) }
             )
         }
     }
@@ -256,7 +260,8 @@ fun PlantGridCard(
     onWaterClick: () -> Unit,
     onDiagnosisClick: () -> Unit,
     onShareClick: () -> Unit,
-    onCancelWaterClick: () -> Unit = {}
+    onCancelWaterClick: () -> Unit = {},
+    onDetailClick: () -> Unit = {}
 ) {
     var showDiagnosisAlert by remember { mutableStateOf(false) }
     var showWaterCancelAlert by remember { mutableStateOf(false) }
@@ -308,7 +313,7 @@ fun PlantGridCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { /* 상세 정보 이동 준비 */ },
+            .clickable { onDetailClick() },
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
@@ -668,9 +673,7 @@ fun EmptyForestView() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text = "아직 정원에 식물이 없어요. 🪴", fontSize = 18.sp, color = Color.Gray)
             Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "입양 버튼을 눌러 첫 식물을 추가해보세요!", fontSize = 14.sp, color = Color.LightGray)
+            Text(text = "아래 🔍 스캐너 버튼을 눌러 첫 식물을 입양해보세요!", fontSize = 14.sp, color = Color.LightGray)
         }
     }
 }
-
-
