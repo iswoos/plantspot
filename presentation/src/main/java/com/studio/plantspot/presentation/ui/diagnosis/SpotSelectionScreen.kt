@@ -73,7 +73,7 @@ fun SpotSelectionScreen(
                 shape = CircleShape
             ) {
                 Text(
-                    text = "식물이 놓일 자리를 손가락으로 터치해 주세요.",
+                    text = "식물을 놓을 곳을 손가락으로 터치해 주세요.",
                     color = Color.White,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
                     fontSize = 16.sp

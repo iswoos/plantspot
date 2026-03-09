@@ -42,7 +42,7 @@ fun NicknameDialog(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "PlantSpot에서 사용할 활동명을 정해주세요.",
+                    text = "플랜트스팟에서 사용할 활동명을 정해주세요.",
                     fontSize = 14.sp,
                     color = Color.Gray
                 )

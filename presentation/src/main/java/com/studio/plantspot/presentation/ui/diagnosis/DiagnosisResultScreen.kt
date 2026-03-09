@@ -196,7 +196,7 @@ fun DiagnosisResultScreen(
                 title = { Text("식물 입양하기", fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
-                        Text("정원에서 부를 식물의 닉네임을 지어주세요.")
+                        Text("정원에서 부를 식물의 애칭을 지어주세요.")
                         Spacer(modifier = Modifier.height(16.dp))
                         OutlinedTextField(
                             value = nickname,
