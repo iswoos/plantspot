@@ -7,7 +7,10 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
@@ -42,22 +45,33 @@ class MemoRepositoryImpl @Inject constructor(
     private val supabase: SupabaseClient
 ) : MemoRepository {
 
-    override fun getMemos(): Flow<List<Memo>> = flow {
-        val userId = supabase.auth.currentUserOrNull()?.id ?: throw Exception("로그인이 필요합니다.")
-        val response = supabase.postgrest.from("plantspot_user_memos")
-            .select {
-                filter { eq("user_id", userId) }
-                order("updated_at", Order.DESCENDING)
-            }
-        val dtoList = response.decodeList<MemoDto>()
-        emit(dtoList.map { it.toDomain() })
+    private val refreshSignal = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    private suspend fun triggerRefresh() {
+        refreshSignal.emit(Unit)
     }
+
+    override fun getMemos(): Flow<List<Memo>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val userId = supabase.auth.currentUserOrNull()?.id ?: throw Exception("로그인이 필요합니다.")
+                val response = supabase.postgrest.from("plantspot_user_memos")
+                    .select {
+                        filter { eq("user_id", userId) }
+                        order("updated_at", Order.DESCENDING)
+                    }
+                val dtoList = response.decodeList<MemoDto>()
+                emit(dtoList.map { it.toDomain() })
+            }
+        }
 
     override suspend fun createMemo(title: String, content: String) {
         val userId = supabase.auth.currentUserOrNull()?.id ?: throw Exception("로그인이 필요합니다.")
         supabase.postgrest.from("plantspot_user_memos").insert(
             MemoInsertDto(userId = userId, title = title, content = content)
         )
+        triggerRefresh()
     }
 
     override suspend fun updateMemo(id: String, title: String, content: String) {
@@ -67,12 +81,14 @@ class MemoRepositoryImpl @Inject constructor(
         ) {
             filter { eq("id", id) }
         }
+        triggerRefresh()
     }
 
     override suspend fun deleteMemo(id: String) {
         supabase.postgrest.from("plantspot_user_memos").delete {
             filter { eq("id", id) }
         }
+        triggerRefresh()
     }
 
     private fun MemoDto.toDomain(): Memo = Memo(

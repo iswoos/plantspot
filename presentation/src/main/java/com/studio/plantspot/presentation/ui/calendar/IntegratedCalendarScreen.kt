@@ -272,7 +272,7 @@ private fun IntegratedCalendarContent(
                         FilterChip(
                             selected = eventTypeFilter == IntegratedEventFilter.WATERING,
                             onClick = { eventTypeFilter = IntegratedEventFilter.WATERING },
-                            label = { Text("💧 물주기") }
+                            label = { Text("💧 물 주기") }
                         )
                     }
                     item {
@@ -567,8 +567,8 @@ private fun IntegratedEventItem(
         is IntegratedEvent.Watering -> {
             icon = "💧"
             bgColor = Color(0xFF64B5F6)
-            titleText = "[${event.plantNickname}] 물주기"
-            subtitleText = "물을 준 날입니다."
+            titleText = "[${event.plantNickname}] 물 주기 완료"
+            subtitleText = ""
             clickEnabled = false
         }
         is IntegratedEvent.PlantSpecificMemo -> {

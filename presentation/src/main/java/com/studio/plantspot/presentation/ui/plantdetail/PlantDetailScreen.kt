@@ -691,8 +691,8 @@ private fun SelectedDayEventsView(
                         TimelineItem(
                             icon = "💧",
                             color = Color(0xFF64B5F6),
-                            title = "물주기",
-                            subtitle = "물을 준 날입니다.",
+                            title = "물 주기 완료",
+                            subtitle = "",
                             onClick = null
                         )
                     }
@@ -738,7 +738,7 @@ private fun TimelineView(
                         TimelineItem(
                             icon = "💧",
                             color = Color(0xFF64B5F6),
-                            title = "물주기",
+                            title = "물 주기 완료",
                             subtitle = event.date.format(dateFormatter),
                             onClick = null
                         )

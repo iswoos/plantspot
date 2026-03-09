@@ -17,7 +17,7 @@ interface PlantRepository {
     suspend fun deletePlant(plantId: String)
 
     // 식물 상세 페이지용 메서드
-    suspend fun getPlantById(plantId: String): UserPlant?
+    fun getPlantById(plantId: String): Flow<UserPlant?>
     suspend fun updateWaterPeriod(plantId: String, waterPeriod: Int)
     fun getPlantMemos(plantId: String): Flow<List<PlantMemo>>
     suspend fun addPlantMemo(plantId: String, content: String, imageUrl: String?): String

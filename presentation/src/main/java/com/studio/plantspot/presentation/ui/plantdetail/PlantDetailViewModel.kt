@@ -47,21 +47,26 @@ class PlantDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = PlantDetailUiState.Loading
             try {
-                // 1. 식물 기본 정보 조회
-                val plant = plantRepository.getPlantById(plantId)
-                if (plant == null) {
-                    _uiState.value = PlantDetailUiState.Error("식물을 찾을 수 없습니다.")
-                    return@launch
-                }
-                _uiState.value = PlantDetailUiState.Success(plant)
-
-                // 2. 메모 스트림 수집
-                plantRepository.getPlantMemos(plantId).collect { memoList ->
-                    _memos.value = memoList
+                // 1. 식물 정보 스트림 수집
+                plantRepository.getPlantById(plantId).collect { plant ->
+                    if (plant == null) {
+                        _uiState.value = PlantDetailUiState.Error("식물을 찾을 수 없습니다.")
+                    } else {
+                        _uiState.value = PlantDetailUiState.Success(plant)
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.value = PlantDetailUiState.Error(e.message ?: "데이터를 불러오는 중 오류가 발생했습니다.")
             }
+        }
+
+        // 2. 메모 스트림 수집 (별도 코루틴)
+        viewModelScope.launch {
+            try {
+                plantRepository.getPlantMemos(plantId).collect { memoList ->
+                    _memos.value = memoList
+                }
+            } catch (e: Exception) {}
         }
 
         // 3. 급수 이력 스트림 수집 (별도 코루틴)
@@ -76,22 +81,11 @@ class PlantDetailViewModel @Inject constructor(
         }
     }
 
-    fun refreshPlant() {
-        viewModelScope.launch {
-            try {
-                val plant = plantRepository.getPlantById(currentPlantId) ?: return@launch
-                _uiState.value = PlantDetailUiState.Success(plant)
-            } catch (e: Exception) {
-                // 조용히 무시
-            }
-        }
-    }
 
     fun updateNickname(newNickname: String) {
         viewModelScope.launch {
             try {
                 plantRepository.updateNickname(currentPlantId, newNickname)
-                refreshPlant()
                 _snackbarMessage.value = "닉네임이 변경되었습니다."
             } catch (e: Exception) {
                 _snackbarMessage.value = "닉네임 변경에 실패했습니다."
@@ -103,7 +97,6 @@ class PlantDetailViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 plantRepository.updateWaterPeriod(currentPlantId, days)
-                refreshPlant()
                 _snackbarMessage.value = "물 주기가 ${days}일로 변경되었습니다."
             } catch (e: Exception) {
                 _snackbarMessage.value = "물 주기 변경에 실패했습니다."
@@ -117,7 +110,6 @@ class PlantDetailViewModel @Inject constructor(
             try {
                 val uploadedImageUrl = imageUri?.let { uploadMemoImage(it) }
                 plantRepository.addPlantMemo(currentPlantId, content, uploadedImageUrl)
-                refreshMemos()
                 _snackbarMessage.value = "메모가 추가되었습니다."
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -139,7 +131,6 @@ class PlantDetailViewModel @Inject constructor(
                     existingImageUrl
                 }
                 plantRepository.updatePlantMemo(memoId, content, finalImageUrl)
-                refreshMemos()
                 _snackbarMessage.value = "메모가 수정되었습니다."
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -154,7 +145,6 @@ class PlantDetailViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 plantRepository.deletePlantMemo(memoId)
-                refreshMemos()
                 _snackbarMessage.value = "메모가 삭제되었습니다."
             } catch (e: Exception) {
                 _snackbarMessage.value = "메모 삭제에 실패했습니다."
@@ -166,14 +156,6 @@ class PlantDetailViewModel @Inject constructor(
         _snackbarMessage.value = null
     }
 
-    private fun refreshMemos() {
-        viewModelScope.launch {
-            plantRepository.getPlantMemos(currentPlantId).collect { memoList ->
-                _memos.value = memoList
-                return@collect
-            }
-        }
-    }
 
     private suspend fun uploadMemoImage(uri: Uri): String {
         val inputStream = context.contentResolver.openInputStream(uri)

@@ -10,7 +10,11 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.OffsetDateTime
@@ -109,43 +113,53 @@ class PlantRepositoryImpl @Inject constructor(
     private val supabase: SupabaseClient
 ) : PlantRepository {
 
-    override fun getUserPlants(): Flow<List<UserPlant>> = flow {
-        val userId = supabase.auth.currentUserOrNull()?.id
-        if (userId != null) {
-            // 1. Fetch plants
-            val plantResponse = supabase.postgrest.from("plantspot_user_plants")
-                .select {
-                    filter { eq("user_id", userId) }
-                    order("created_at", Order.DESCENDING)
-                }
-            val plantsDto = plantResponse.decodeList<UserPlantDto>()
-            val plantIds = plantsDto.map { it.id }
+    private val refreshSignal = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-            // 2. Fetch latest water history for each plant (optimized search)
-            val historyRecords = if (plantIds.isNotEmpty()) {
-                supabase.postgrest.from("plantspot_user_plants_water_history")
-                    .select {
-                        filter { isIn("plant_id", plantIds) }
-                        order("watered_at", Order.DESCENDING)
-                    }.decodeList<WaterHistoryInsertDto>()
-            } else {
-                emptyList()
-            }
-
-            // 3. Map history to plants (taking the first/latest one for each plantId)
-            val latestHistoryMap = historyRecords.groupBy { it.plantId }
-                .mapValues { (_, records) -> records.first().wateredAt }
-
-            val plants = plantsDto.map { dto ->
-                dto.toDomain().copy(
-                    lastWateredAt = latestHistoryMap[dto.id]?.let { OffsetDateTime.parse(it) }
-                )
-            }
-            emit(plants)
-        } else {
-            emit(emptyList())
-        }
+    private suspend fun triggerRefresh() {
+        refreshSignal.emit(Unit)
     }
+
+    override fun getUserPlants(): Flow<List<UserPlant>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val userId = supabase.auth.currentUserOrNull()?.id
+                if (userId != null) {
+                    // 1. Fetch plants
+                    val plantResponse = supabase.postgrest.from("plantspot_user_plants")
+                        .select {
+                            filter { eq("user_id", userId) }
+                            order("created_at", Order.DESCENDING)
+                        }
+                    val plantsDto = plantResponse.decodeList<UserPlantDto>()
+                    val plantIds = plantsDto.map { it.id }
+
+                    // 2. Fetch latest water history for each plant (optimized search)
+                    val historyRecords = if (plantIds.isNotEmpty()) {
+                        supabase.postgrest.from("plantspot_user_plants_water_history")
+                            .select {
+                                filter { isIn("plant_id", plantIds) }
+                                order("watered_at", Order.DESCENDING)
+                            }.decodeList<WaterHistoryInsertDto>()
+                    } else {
+                        emptyList()
+                    }
+
+                    // 3. Map history to plants (taking the first/latest one for each plantId)
+                    val latestHistoryMap = historyRecords.groupBy { it.plantId }
+                        .mapValues { (_, records) -> records.first().wateredAt }
+
+                    val plants = plantsDto.map { dto ->
+                        dto.toDomain().copy(
+                            lastWateredAt = latestHistoryMap[dto.id]?.let { OffsetDateTime.parse(it) }
+                        )
+                    }
+                    emit(plants)
+                } else {
+                    emit(emptyList())
+                }
+            }
+        }
 
     override suspend fun updateWateringDate(plantId: String) {
         val now = OffsetDateTime.now(ZoneOffset.UTC).toString()
@@ -156,6 +170,7 @@ class PlantRepositoryImpl @Inject constructor(
             wateredAt = now
         )
         supabase.postgrest.from("plantspot_user_plants_water_history").insert(historyDto)
+        triggerRefresh()
     }
 
     override suspend fun updateNickname(plantId: String, newNickname: String) {
@@ -165,6 +180,7 @@ class PlantRepositoryImpl @Inject constructor(
             }) {
                 filter { eq("id", plantId) }
             }
+        triggerRefresh()
     }
 
     override suspend fun updateDiagnosisResult(plantId: String, score: Int, imageUrl: String?) {
@@ -178,6 +194,7 @@ class PlantRepositoryImpl @Inject constructor(
             .update(updateDto) {
                 filter { eq("id", plantId) }
             }
+        triggerRefresh()
     }
 
     override suspend fun addPlant(nickname: String, officialName: String, imageUrl: String?, score: Int, waterPeriod: Int): String {
@@ -200,6 +217,7 @@ class PlantRepositoryImpl @Inject constructor(
             select()
         }.decodeSingle<PlantIdResponseDto>()
         
+        triggerRefresh()
         return response.id
     }
 
@@ -235,6 +253,7 @@ class PlantRepositoryImpl @Inject constructor(
                 eq("id", latestRecord.id)
             }
         }
+        triggerRefresh()
     }
 
     override suspend fun addDiagnosisHistory(history: PlantDiagnosisHistory) {
@@ -257,63 +276,79 @@ class PlantRepositoryImpl @Inject constructor(
             .delete {
                 filter { eq("id", plantId) }
             }
+        triggerRefresh()
     }
 
     // ─────────────────────────────────────────────────────────
     // 식물 상세 페이지용 메서드 구현
     // ─────────────────────────────────────────────────────────
 
-    override suspend fun getPlantById(plantId: String): UserPlant? {
-        // plantspot_user_plants 단건 조회
-        val response = supabase.postgrest.from("plantspot_user_plants")
-            .select {
-                filter { eq("id", plantId) }
-            }
-        val dtoList = response.decodeList<UserPlantDto>()
-        val dto = dtoList.firstOrNull() ?: return null
+    override fun getPlantById(plantId: String): Flow<UserPlant?> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                // plantspot_user_plants 단건 조회
+                val response = supabase.postgrest.from("plantspot_user_plants")
+                    .select {
+                        filter { eq("id", plantId) }
+                    }
+                val dtoList = response.decodeList<UserPlantDto>()
+                val dto = dtoList.firstOrNull()
+                
+                if (dto == null) {
+                    emit(null)
+                    return@flow
+                }
 
-        // 최신 급수일 조회
-        val historyResponse = supabase.postgrest.from("plantspot_user_plants_water_history")
-            .select {
-                filter { eq("plant_id", plantId) }
-                order("watered_at", Order.DESCENDING)
-            }
-        val latestWateredAt = historyResponse.decodeList<WaterHistoryInsertDto>()
-            .firstOrNull()?.wateredAt
+                // 최신 급수일 조회
+                val historyResponse = supabase.postgrest.from("plantspot_user_plants_water_history")
+                    .select {
+                        filter { eq("plant_id", plantId) }
+                        order("watered_at", Order.DESCENDING)
+                    }
+                val latestWateredAt = historyResponse.decodeList<WaterHistoryInsertDto>()
+                    .firstOrNull()?.wateredAt
 
-        return dto.toDomain().copy(
-            lastWateredAt = latestWateredAt?.let { OffsetDateTime.parse(it) }
-        )
-    }
+                val plant = dto.toDomain().copy(
+                    lastWateredAt = latestWateredAt?.let { OffsetDateTime.parse(it) }
+                )
+                emit(plant)
+            }
+        }
 
     override suspend fun updateWaterPeriod(plantId: String, waterPeriod: Int) {
         supabase.postgrest.from("plantspot_user_plants")
             .update(WaterPeriodUpdateDto(waterPeriod = waterPeriod)) {
                 filter { eq("id", plantId) }
             }
+        triggerRefresh()
     }
 
-    override fun getPlantMemos(plantId: String): Flow<List<PlantMemo>> = flow {
-        val response = supabase.postgrest.from("plantspot_user_plant_memos")
-            .select {
-                filter { eq("plant_id", plantId) }
-                order("created_at", Order.DESCENDING)
-            }
-        val memos = response.decodeList<PlantMemoDto>().map { dto ->
-            // imageUrl이 DB에 path 형태로 저장되어 있다면 (http로 시작 안함) 서명된 URL로 변환
-            val finalUrl = if (!dto.imageUrl.isNullOrBlank() && !dto.imageUrl.startsWith("http")) {
-                try {
-                    createSignedUrl("plant-user-memo-images", dto.imageUrl)
-                } catch (e: Exception) {
-                    null // 에러 시 null 처리
+    override fun getPlantMemos(plantId: String): Flow<List<PlantMemo>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val response = supabase.postgrest.from("plantspot_user_plant_memos")
+                    .select {
+                        filter { eq("plant_id", plantId) }
+                        order("created_at", Order.DESCENDING)
+                    }
+                val memos = response.decodeList<PlantMemoDto>().map { dto ->
+                    // imageUrl이 DB에 path 형태로 저장되어 있다면 (http로 시작 안함) 서명된 URL로 변환
+                    val finalUrl = if (!dto.imageUrl.isNullOrBlank() && !dto.imageUrl.startsWith("http")) {
+                        try {
+                            createSignedUrl("plant-user-memo-images", dto.imageUrl)
+                        } catch (e: Exception) {
+                            null // 에러 시 null 처리
+                        }
+                    } else {
+                        dto.imageUrl
+                    }
+                    dto.copy(imageUrl = finalUrl).toDomain()
                 }
-            } else {
-                dto.imageUrl
+                emit(memos)
             }
-            dto.copy(imageUrl = finalUrl).toDomain()
         }
-        emit(memos)
-    }
 
     override suspend fun addPlantMemo(plantId: String, content: String, imageUrl: String?): String {
         val insertDto = PlantMemoInsertDto(
@@ -323,7 +358,9 @@ class PlantRepositoryImpl @Inject constructor(
         )
         val response = supabase.postgrest.from("plantspot_user_plant_memos")
             .insert(insertDto) { select() }
-        return response.decodeSingle<PlantMemoDto>().id
+        val id = response.decodeSingle<PlantMemoDto>().id
+        triggerRefresh()
+        return id
     }
 
     override suspend fun updatePlantMemo(memoId: String, content: String, imageUrl: String?) {
@@ -332,6 +369,7 @@ class PlantRepositoryImpl @Inject constructor(
             .update(PlantMemoUpdateDto(content = content, imageUrl = imageUrl, updatedAt = now)) {
                 filter { eq("id", memoId) }
             }
+        triggerRefresh()
     }
 
     override suspend fun deletePlantMemo(memoId: String) {
@@ -357,44 +395,57 @@ class PlantRepositoryImpl @Inject constructor(
             .delete {
                 filter { eq("id", memoId) }
             }
+        triggerRefresh()
     }
 
-    override fun getWateringHistory(plantId: String): Flow<List<OffsetDateTime>> = flow {
-        val response = supabase.postgrest.from("plantspot_user_plants_water_history")
-            .select {
-                filter { eq("plant_id", plantId) }
-                order("watered_at", Order.DESCENDING)
+    override fun getWateringHistory(plantId: String): Flow<List<OffsetDateTime>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val response = supabase.postgrest.from("plantspot_user_plants_water_history")
+                    .select {
+                        filter { eq("plant_id", plantId) }
+                        order("watered_at", Order.DESCENDING)
+                    }
+                val dates = response.decodeList<WaterHistoryInsertDto>()
+                    .map { OffsetDateTime.parse(it.wateredAt) }
+                emit(dates)
             }
-        val dates = response.decodeList<WaterHistoryInsertDto>()
-            .map { OffsetDateTime.parse(it.wateredAt) }
-        emit(dates)
-    }
-
-    override fun getAllWateringHistory(): Flow<List<Pair<String, OffsetDateTime>>> = flow {
-        val response = supabase.postgrest.from("plantspot_user_plants_water_history")
-            .select { order("watered_at", Order.DESCENDING) }
-        val histories = response.decodeList<WaterHistoryInsertDto>()
-            .map { it.plantId to OffsetDateTime.parse(it.wateredAt) }
-        emit(histories)
-    }
-
-    override fun getAllPlantMemos(): Flow<List<PlantMemo>> = flow {
-        val response = supabase.postgrest.from("plantspot_user_plant_memos")
-            .select { order("created_at", Order.DESCENDING) }
-        val memos = response.decodeList<PlantMemoDto>().map { dto ->
-            val finalUrl = if (!dto.imageUrl.isNullOrBlank() && !dto.imageUrl.startsWith("http")) {
-                try {
-                    createSignedUrl("plant-user-memo-images", dto.imageUrl)
-                } catch (e: Exception) {
-                    null
-                }
-            } else {
-                dto.imageUrl
-            }
-            dto.copy(imageUrl = finalUrl).toDomain()
         }
-        emit(memos)
-    }
+
+    override fun getAllWateringHistory(): Flow<List<Pair<String, OffsetDateTime>>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val response = supabase.postgrest.from("plantspot_user_plants_water_history")
+                    .select { order("watered_at", Order.DESCENDING) }
+                val histories = response.decodeList<WaterHistoryInsertDto>()
+                    .map { it.plantId to OffsetDateTime.parse(it.wateredAt) }
+                emit(histories)
+            }
+        }
+
+    override fun getAllPlantMemos(): Flow<List<PlantMemo>> = refreshSignal
+        .onStart { emit(Unit) }
+        .flatMapLatest {
+            flow {
+                val response = supabase.postgrest.from("plantspot_user_plant_memos")
+                    .select { order("created_at", Order.DESCENDING) }
+                val memos = response.decodeList<PlantMemoDto>().map { dto ->
+                    val finalUrl = if (!dto.imageUrl.isNullOrBlank() && !dto.imageUrl.startsWith("http")) {
+                        try {
+                            createSignedUrl("plant-user-memo-images", dto.imageUrl)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else {
+                        dto.imageUrl
+                    }
+                    dto.copy(imageUrl = finalUrl).toDomain()
+                }
+                emit(memos)
+            }
+        }
 
     /**
      * Private 버킷용: 서명된 URL(1시간 유효)을 생성해 반환합니다.
