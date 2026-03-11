@@ -62,6 +62,8 @@ import com.studio.plantspot.presentation.ui.calendar.IntegratedCalendarScreen
 import com.studio.plantspot.presentation.ui.memo.MemoScreen
 import com.studio.plantspot.presentation.ui.home.HomeScreen
 import com.studio.plantspot.presentation.ui.lounge.LoungeScreen
+import com.studio.plantspot.presentation.ui.lounge.PostDetailScreen
+import com.studio.plantspot.presentation.ui.lounge.PostWriteScreen
 import com.studio.plantspot.presentation.ui.navigation.Screen
 import com.studio.plantspot.presentation.ui.navigation.bottomNavItems
 import com.studio.plantspot.presentation.ui.diagnosis.PlantSelectionBottomSheet
@@ -154,8 +156,18 @@ fun MainScreen(
                 }
             },
             floatingActionButton = {
-                LargeFloatingActionButton(
-                    onClick = {
+                val navBackStackEntry by navController.currentBackStackEntryAsState()
+                val currentRoute = navBackStackEntry?.destination?.route
+                val showFab = currentRoute in listOf(
+                    Screen.Home.route,
+                    Screen.Memo.route,
+                    Screen.Calendar.route,
+                    Screen.Lounge.route
+                )
+
+                if (showFab) {
+                    LargeFloatingActionButton(
+                        onClick = {
                         val hasPermission = ContextCompat.checkSelfPermission(
                             context, Manifest.permission.CAMERA
                         ) == PackageManager.PERMISSION_GRANTED
@@ -206,7 +218,8 @@ fun MainScreen(
                         }
                     }
                 }
-            },
+            }
+        },
             floatingActionButtonPosition = FabPosition.Center
         ) { innerPadding ->
             NavHost(
@@ -230,7 +243,57 @@ fun MainScreen(
                     MemoScreen()
                 }
                 composable(Screen.Calendar.route) { IntegratedCalendarScreen() }
-                composable(Screen.Lounge.route) { LoungeScreen() }
+                composable(Screen.Lounge.route) { 
+                    LoungeScreen(
+                        onNavigateToWrite = { navController.navigate(Screen.LoungeWrite.route) },
+                        onNavigateToDetail = { postId -> navController.navigate("lounge_detail/$postId") }
+                    )
+                }
+                
+                composable(
+                    route = Screen.LoungeDetail.route,
+                    arguments = listOf(navArgument("postId") { type = NavType.StringType }),
+                    enterTransition = { slideInHorizontally(initialOffsetX = { it }, animationSpec = tween(300)) },
+                    exitTransition = { fadeOut(animationSpec = tween(300)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                    popExitTransition = { slideOutHorizontally(targetOffsetX = { it }, animationSpec = tween(300)) }
+                ) { backStackEntry ->
+                    val postId = backStackEntry.arguments?.getString("postId") ?: return@composable
+                    PostDetailScreen(
+                        postId = postId,
+                        currentUserId = user?.id,
+                        onBack = { navController.popBackStack() },
+                        onNavigateToEdit = { id -> navController.navigate("lounge_edit/$id") }
+                    )
+                }
+
+                composable(
+                    route = Screen.LoungeWrite.route,
+                    enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(300)) },
+                    exitTransition = { fadeOut(animationSpec = tween(300)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                    popExitTransition = { slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300)) }
+                ) {
+                    PostWriteScreen(
+                        postId = null,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                composable(
+                    route = Screen.LoungeEdit.route,
+                    arguments = listOf(navArgument("postId") { type = NavType.StringType }),
+                    enterTransition = { slideInVertically(initialOffsetY = { it }, animationSpec = tween(300)) },
+                    exitTransition = { fadeOut(animationSpec = tween(300)) },
+                    popEnterTransition = { fadeIn(animationSpec = tween(300)) },
+                    popExitTransition = { slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300)) }
+                ) { backStackEntry ->
+                    val postId = backStackEntry.arguments?.getString("postId") ?: return@composable
+                    PostWriteScreen(
+                        postId = postId,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
                 composable(
                     route = Screen.PlantDetail.route,
                     arguments = listOf(navArgument("plantId") { type = NavType.StringType }),

@@ -16,7 +16,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
     object Home : Screen("home", "나의 정원", Icons.Default.Home)
     object Memo : Screen("memo", "메모하기", Icons.Default.Edit)
     object Calendar : Screen("calendar", "통합 캘린더", Icons.Default.DateRange)
-    object Lounge : Screen("lounge", "플랜트 라운지", Icons.Default.Person)
+    object Lounge : Screen("lounge", "커뮤니티", Icons.Default.Person)
     
     // Diagnosis Flow
     object DiagnosisCamera : Screen("diagnosis_camera/{mode}", "공간 촬영")
@@ -26,6 +26,11 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector?
 
     // Plant Detail
     object PlantDetail : Screen("plant_detail/{plantId}", "식물 상세")
+
+    // Lounge (Community) Flow
+    object LoungeDetail : Screen("lounge_detail/{postId}", "게시글 상세")
+    object LoungeWrite : Screen("lounge_write", "글쓰기")
+    object LoungeEdit : Screen("lounge_edit/{postId}", "글수정")
 }
 
 val bottomNavItems = listOf(

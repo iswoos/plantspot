@@ -141,8 +141,8 @@ private fun MemoListScreen(
                 onClick = onClickCreate,
                 containerColor = GreenPrimary,
                 contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier.shadow(8.dp, CircleShape)
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.shadow(8.dp, RoundedCornerShape(16.dp))
             ) {
                 Icon(Icons.Default.Add, contentDescription = "새 메모")
             }
